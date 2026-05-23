@@ -22,3 +22,8 @@ site/
 Thumbs.db
 .vscode/
 .idea/
+
+# JupyterLite build artifacts
+_output/
+_litetest/
+.jupyterlite.doit.db

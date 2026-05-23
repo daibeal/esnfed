@@ -17,6 +17,9 @@ The core depends only on **NumPy** and **NetworkX**.
 pip install esnfed
 ```
 
+[:material-rocket-launch: Try it live in your browser](https://daibeal.github.io/esnfed/live/lab/index.html?path=quickstart.ipynb){ .md-button .md-button--primary }
+&nbsp; no install, runs entirely in your browser via JupyterLite + Pyodide.
+
 !!! tip "Why this and not [ReservoirPy](https://reservoirpy.readthedocs.io)?"
     ReservoirPy is the mature library for *building and tuning* reservoir models.
     `esnfed` does **not** replace it — it adds the **federated** layer ReservoirPy

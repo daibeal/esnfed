@@ -66,11 +66,14 @@ reservoirpy = [
 flower = [
     "flwr>=1.7",
 ]
-# Documentation site (MkDocs Material).
+# Documentation site (MkDocs Material) + in-browser live demo (JupyterLite).
 docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.24",
     "mkdocs-jupyter>=0.24",
+    "jupyterlite-core>=0.3",
+    "jupyterlite-pyodide-kernel>=0.3",
+    "jupyter-server>=2.0",
 ]
 # Experimental FedResPrompt LLM orchestration (optional real-LLM backend).
 llm = [

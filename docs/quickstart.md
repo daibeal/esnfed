@@ -1,5 +1,14 @@
 # Quickstart
 
+!!! tip "Run this without installing anything"
+    Every snippet below runs **in your browser** — open the live notebook and
+    press Shift+Enter:
+
+    [:material-rocket-launch: Open the live quickstart](https://daibeal.github.io/esnfed/live/lab/index.html?path=quickstart.ipynb){ .md-button .md-button--primary }
+
+    It's a real Python environment (JupyterLite + Pyodide); edit and re-run any
+    cell.
+
 ## Train a single Echo State Network
 
 An ESN has a large, fixed, random *reservoir* and a single trained linear
