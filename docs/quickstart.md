@@ -9,6 +9,20 @@
     It's a real Python environment (JupyterLite + Pyodide); edit and re-run any
     cell.
 
+## Run it right here
+
+The full quickstart notebook, embedded and runnable in this page (give it a few
+seconds to boot the in-browser kernel, then run the cells top to bottom):
+
+<iframe
+  src="../live/lab/index.html?path=quickstart.ipynb"
+  width="100%" height="720"
+  style="border:1px solid var(--md-default-fg-color--lightest); border-radius:8px"
+  title="esnfed live quickstart">
+</iframe>
+
+There is also a [federated strategies notebook](https://daibeal.github.io/esnfed/live/lab/index.html?path=federated.ipynb).
+
 ## Train a single Echo State Network
 
 An ESN has a large, fixed, random *reservoir* and a single trained linear
