@@ -15,7 +15,8 @@ results unchanged** (each has a transparent NumPy fallback):
 ## What actually helps where
 
 Honest measurements (one CPU, 3000 timesteps, density 0.1, harvest time in ms —
-lower is better). Use them as a guide to the *regimes*, not exact figures:
+lower is better), reproducible with `python experiments/exp9_performance.py`
+(needs `esnfed[fast]`). Use them as a guide to the *regimes*, not exact figures:
 
 | Reservoir N | NumPy f64 | Numba f64 | NumPy f32 | Sparse |
 |------------:|----------:|----------:|----------:|-------:|
