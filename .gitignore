@@ -13,6 +13,10 @@ figures/
 tables/
 outputs/
 
+# MkDocs build
+site/
+.cache/
+
 # OS / editors
 .DS_Store
 Thumbs.db
