@@ -87,9 +87,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/daibeal/tfg-inf"
-Repository = "https://github.com/daibeal/tfg-inf"
-Issues = "https://github.com/daibeal/tfg-inf/issues"
+Homepage = "https://daibeal.github.io/esnfed/"
+Documentation = "https://daibeal.github.io/esnfed/"
+Repository = "https://github.com/daibeal/esnfed"
+Issues = "https://github.com/daibeal/esnfed/issues"
 
 # ---- Hatch build configuration ----------------------------------------------
 [tool.hatch.version]
