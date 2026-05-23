@@ -106,6 +106,7 @@ nav:
     - Federated strategies: guide/federated.md
     - Visualisation: guide/viz.md
     - Interoperability: guide/interop.md
+  - Performance: performance.md
   - Examples: examples.md
   - Tutorial (notebook): tutorial.ipynb
   - FedResPrompt: fedresprompt.md

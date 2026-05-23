@@ -17,12 +17,29 @@ Readout:
 where ``a`` is the leaking rate, ``b`` a bias constant, ``W`` the (spectral-radius
 scaled) reservoir matrix and ``W_in`` the input matrix. ``W_out`` is the only
 trained quantity.
+
+Performance
+-----------
+The state-harvesting loop is the hot path. Three optional accelerations are
+available and all keep the public API and results unchanged:
+
+* **Numba** -- if installed (``pip install "esnfed[fast]"``), the dense
+  ``float64`` harvest loop is JIT-compiled to native speed automatically;
+  otherwise a pure-NumPy fallback is used.
+* **Sparse reservoirs** (``sparse=True``) -- store ``W`` as a SciPy CSR matrix,
+  turning the per-step matrix-vector product from O(N^2) into O(edges); a large
+  win for big, sparse reservoirs.
+* **float32** (``dtype=np.float32``) -- halves memory traffic for a modest speed
+  gain on memory-bound workloads.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 import numpy as np
+
+# Reservoir size up to which Numba is auto-enabled (above this NumPy/BLAS wins).
+_NUMBA_AUTO_MAX_N = 1000
 
 
 @dataclass
@@ -53,6 +70,19 @@ class EchoStateNetwork:
         Constant bias fed to the reservoir and readout.
     seed
         Seed for the input-weight RNG (the reservoir itself is supplied).
+    input_weights
+        Optional caller-supplied input matrix of shape ``(N, 1 + n_inputs)``
+        (e.g. lifted from a ReservoirPy reservoir); if ``None``, drawn randomly.
+    dtype
+        Floating-point type for the reservoir and states (``np.float64`` by
+        default; ``np.float32`` trades precision for memory/speed).
+    sparse
+        If true, store the reservoir as a SciPy CSR matrix (needs SciPy); the
+        per-step matvec then costs O(edges) instead of O(N^2). Best for large,
+        low-density reservoirs.
+    use_numba
+        ``None`` (default) uses Numba for the dense ``float64`` harvest if it is
+        installed; ``True``/``False`` force it on/off.
     """
 
     n_inputs: int
@@ -66,38 +96,61 @@ class EchoStateNetwork:
     bias: float = 1.0
     seed: int | None = None
     input_weights: np.ndarray | None = None
+    dtype: object = np.float64
+    sparse: bool = False
+    use_numba: bool | None = None
 
-    W: np.ndarray = field(init=False, repr=False)
+    W: object = field(init=False, repr=False)
     W_in: np.ndarray = field(init=False, repr=False)
     W_out: np.ndarray | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
-        W = np.asarray(self.reservoir, dtype=float).copy()
+        dt = np.dtype(self.dtype)
+        res = self.reservoir
+        if _is_scipy_sparse(res):
+            res = res.toarray()
+        W = np.asarray(res, dtype=dt).copy()
         if W.ndim != 2 or W.shape[0] != W.shape[1]:
             raise ValueError("reservoir must be a square 2-D matrix")
         self.n_reservoir = W.shape[0]
 
-        # Rescale the reservoir to the requested spectral radius.
-        sr = _spectral_radius(W)
+        # Rescale the reservoir to the requested spectral radius. Power iteration
+        # (matvec-based) is used for the sparse path to avoid a dense O(N^3) eig.
+        sr = _spectral_radius_iter(W) if self.sparse else _spectral_radius(W)
         if sr > 0:
-            W *= self.spectral_radius / sr
-        self.W = W
+            W = (W * (self.spectral_radius / sr)).astype(dt)
+
+        self._is_sparse = bool(self.sparse)
+        if self._is_sparse:
+            sp = _scipy_sparse()
+            self.W = sp.csr_matrix(W)
+        else:
+            self.W = np.ascontiguousarray(W, dtype=dt)
 
         if self.input_weights is not None:
-            # Caller-supplied input matrix (e.g. from a ReservoirPy reservoir).
-            W_in = np.asarray(self.input_weights, dtype=float)
+            W_in = np.asarray(self.input_weights, dtype=dt)
             expected = (self.n_reservoir, self.n_inputs + 1)
             if W_in.shape != expected:
                 raise ValueError(
                     f"input_weights must have shape {expected}, got {W_in.shape}"
                 )
-            self.W_in = W_in
+            self.W_in = np.ascontiguousarray(W_in, dtype=dt)
         else:
             rng = np.random.default_rng(self.seed)
-            # Input weights in [-input_scaling, +input_scaling]; col 0 is bias.
-            self.W_in = self.input_scaling * (
-                rng.uniform(-1.0, 1.0, size=(self.n_reservoir, self.n_inputs + 1))
+            W_in = self.input_scaling * rng.uniform(
+                -1.0, 1.0, size=(self.n_reservoir, self.n_inputs + 1)
             )
+            self.W_in = np.ascontiguousarray(W_in, dtype=dt)
+
+        # Numba accelerates the dense float64 path only. It is a large win for
+        # small, overhead-bound reservoirs but on par with (or slower than) NumPy
+        # for large, BLAS-bound ones, so the automatic policy enables it only up
+        # to a size threshold; pass use_numba=True/False to override.
+        base = (not self._is_sparse) and dt == np.dtype(np.float64)
+        if self.use_numba is None:
+            self._numba_enabled = base and self.n_reservoir <= _NUMBA_AUTO_MAX_N
+        else:
+            self._numba_enabled = base and bool(self.use_numba)
 
     # ------------------------------------------------------------------ states
     def harvest(self, u: np.ndarray, x0: np.ndarray | None = None) -> np.ndarray:
@@ -119,19 +172,21 @@ class EchoStateNetwork:
         u = np.atleast_2d(u)
         if u.shape[1] != self.n_inputs:
             u = u.reshape(-1, self.n_inputs)
-        T = u.shape[0]
-        a = self.leaking_rate
+        u = np.ascontiguousarray(u, dtype=self.W_in.dtype)
 
-        x = np.zeros(self.n_reservoir) if x0 is None else np.asarray(x0, float).copy()
-        Z = np.empty((T, 1 + self.n_inputs + self.n_reservoir))
-        for t in range(T):
-            u_b = np.concatenate(([self.bias], u[t]))
-            pre = self.W_in @ u_b + self.W @ x
-            x = (1.0 - a) * x + a * np.tanh(pre)
-            Z[t, 0] = self.bias
-            Z[t, 1 : 1 + self.n_inputs] = u[t]
-            Z[t, 1 + self.n_inputs :] = x
-        self._last_state = x
+        if self._numba_enabled and x0 is None:
+            fn = _get_numba_harvest()
+            if fn is not None:
+                Z = fn(self.W, self.W_in, u, float(self.leaking_rate),
+                       float(self.bias), int(self.n_inputs))
+                self._last_state = Z[-1, 1 + self.n_inputs:] if len(Z) else \
+                    np.zeros(self.n_reservoir)
+                return Z
+
+        Z = _harvest_numpy(self.W, self.W_in, u, self.leaking_rate, self.bias,
+                           self.n_inputs, self.n_reservoir, x0)
+        self._last_state = Z[-1, 1 + self.n_inputs:] if len(Z) else \
+            np.zeros(self.n_reservoir)
         return Z
 
     # ----------------------------------------------------------------- training
@@ -175,17 +230,125 @@ class EchoStateNetwork:
         return 1 + self.n_inputs + self.n_reservoir
 
 
+# --------------------------------------------------------------------- harvest
+def _harvest_numpy(W, W_in, u, a, bias, n_inputs, n_reservoir, x0):
+    """Pure-NumPy harvest; works for a dense ndarray or a SciPy CSR reservoir."""
+    dt = W_in.dtype
+    T = u.shape[0]
+    x = (np.zeros(n_reservoir, dtype=dt) if x0 is None
+         else np.asarray(x0, dtype=dt).copy())
+    Z = np.empty((T, 1 + n_inputs + n_reservoir), dtype=dt)
+    for t in range(T):
+        u_b = np.empty(1 + n_inputs, dtype=dt)
+        u_b[0] = bias
+        u_b[1:] = u[t]
+        pre = W_in @ u_b + W @ x
+        x = ((1.0 - a) * x + a * np.tanh(pre)).astype(dt, copy=False)
+        Z[t, 0] = bias
+        Z[t, 1 : 1 + n_inputs] = u[t]
+        Z[t, 1 + n_inputs :] = x
+    return Z
+
+
+def _harvest_kernel(W, W_in, u, a, bias, n_inputs):
+    """Vectorised dense harvest (float64), compiled by Numba when available.
+
+    Keeps the BLAS matrix-vector products (``W @ x``) while running the timestep
+    loop natively, removing Python per-step overhead. A clear win for small,
+    overhead-bound reservoirs; on par with NumPy for large, BLAS-bound ones.
+    """
+    T = u.shape[0]
+    n = W.shape[0]
+    Z = np.empty((T, 1 + n_inputs + n))
+    x = np.zeros(n)
+    ub = np.zeros(1 + n_inputs)
+    ub[0] = bias
+    for t in range(T):
+        for k in range(n_inputs):
+            ub[1 + k] = u[t, k]
+        pre = W_in @ ub + W @ x
+        x = (1.0 - a) * x + a * np.tanh(pre)
+        Z[t, 0] = bias
+        for k in range(n_inputs):
+            Z[t, 1 + k] = u[t, k]
+        for i in range(n):
+            Z[t, 1 + n_inputs + i] = x[i]
+    return Z
+
+
+_NUMBA_FN = None
+
+
+def _get_numba_harvest():
+    """Lazily compile (and cache) the Numba harvest; return None if unavailable."""
+    global _NUMBA_FN
+    if _NUMBA_FN is None:
+        try:
+            from numba import njit
+
+            fn = njit(cache=False)(_harvest_kernel)
+            # Eager warm-up so a compilation failure falls back to NumPy cleanly.
+            fn(np.zeros((1, 1)), np.zeros((1, 2)), np.zeros((2, 1)), 1.0, 1.0, 1)
+            _NUMBA_FN = fn
+        except Exception:
+            _NUMBA_FN = False
+    return _NUMBA_FN or None
+
+
 # --------------------------------------------------------------------- helpers
+def _is_scipy_sparse(obj) -> bool:
+    return type(obj).__module__.startswith("scipy.sparse")
+
+
+def _scipy_sparse():
+    try:
+        import scipy.sparse as sp
+    except ImportError as e:  # pragma: no cover
+        raise ImportError(
+            "sparse=True requires SciPy; install esnfed[fast] (or scipy)."
+        ) from e
+    return sp
+
+
 def _spectral_radius(W: np.ndarray) -> float:
-    """Largest absolute eigenvalue of a square matrix."""
+    """Largest absolute eigenvalue of a (dense) square matrix."""
     if W.shape[0] == 0:
         return 0.0
-    eigs = np.linalg.eigvals(W)
-    return float(np.max(np.abs(eigs)))
+    return float(np.max(np.abs(np.linalg.eigvals(W))))
+
+
+def _spectral_radius_iter(W, iters: int = 1000, seed: int = 0) -> float:
+    """Spectral radius by power iteration (Gelfand growth ratio); matvec-based,
+    so it works on dense or sparse matrices and avoids a dense O(N^3) eig."""
+    n = W.shape[0]
+    if n == 0:
+        return 0.0
+    rng = np.random.default_rng(seed)
+    v = rng.standard_normal(n)
+    nrm = np.linalg.norm(v)
+    if nrm == 0:
+        return 0.0
+    v /= nrm
+    est = 0.0
+    for _ in range(iters):
+        w = W @ v
+        nrm = float(np.linalg.norm(w))
+        if nrm == 0:
+            return 0.0
+        v = w / nrm
+        est = nrm
+    return est
 
 
 def ridge_statistics(Z: np.ndarray, Y: np.ndarray):
-    """Return sufficient statistics ``A = Z^T Z`` and ``B = Z^T Y``."""
+    """Return sufficient statistics ``A = Z^T Z`` and ``B = Z^T Y``.
+
+    The Gram matrix is accumulated in float64 even when the states are float32:
+    the harvest keeps the float32 speed/memory benefit, while the (small,
+    ill-conditioned) ridge solve stays numerically stable.
+    """
+    Z = np.asarray(Z, dtype=np.float64)
+    Y = np.asarray(Y, dtype=np.float64)
     return Z.T @ Z, Z.T @ Y
 
 

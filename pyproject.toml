@@ -44,6 +44,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional accelerators for the reservoir harvest: Numba JIT (small/medium
+# reservoirs) and SciPy sparse reservoirs (large N). All have NumPy fallbacks.
+fast = [
+    "numba>=0.58",
+    "scipy>=1.7",
+]
 # Everything needed to reproduce the experiments (figures, tables, CSVs).
 experiments = [
     "matplotlib>=3.5",

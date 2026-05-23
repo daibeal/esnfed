@@ -29,6 +29,21 @@ esn.fit(u_train, y_train)
 y_hat = esn.predict(u_test)
 ```
 
+## Acceleration (optional)
+
+Three optional, drop-in accelerators speed up the harvest without changing the
+results — see [Performance](../performance.md) for benchmarks and when each helps:
+
+```python
+EchoStateNetwork(1, 1, W, sparse=True)        # SciPy CSR reservoir (large N)
+EchoStateNetwork(1, 1, W, dtype=np.float32)   # half-precision states (large N)
+EchoStateNetwork(1, 1, W, use_numba=True)     # force Numba JIT (small/medium N)
+```
+
+With `esnfed[fast]` installed, Numba is enabled automatically for reservoirs up
+to `N = 1000`. All three fall back to pure NumPy when their optional dependency
+is absent.
+
 ## The echo state property
 
 For the reservoir to be useful, its state must depend only on the input history,

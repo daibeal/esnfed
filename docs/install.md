@@ -11,6 +11,7 @@ pip install esnfed                  # core (numpy + networkx)
 
 | Extra | Adds | For |
 |-------|------|-----|
+| `fast` | numba, scipy | optional [acceleration](performance.md) (Numba JIT, sparse reservoirs) |
 | `viz` | plotly, matplotlib, seaborn, kaleido | the `esnfed.viz` plots |
 | `experiments` | matplotlib, pandas, scipy, scikit-learn | reproducing the experiments |
 | `reservoirpy` | reservoirpy | designing reservoirs in ReservoirPy |
@@ -19,6 +20,7 @@ pip install esnfed                  # core (numpy + networkx)
 | `dev` | pytest, build, twine | development |
 
 ```bash
+pip install "esnfed[fast]"                   # Numba + sparse acceleration
 pip install "esnfed[viz]"                    # plotting
 pip install "esnfed[viz,experiments]"        # plotting + data-science stack
 pip install "esnfed[reservoirpy,flower,llm]" # all integrations
