@@ -19,7 +19,8 @@ FIG = ROOT / "memoria" / "figuras"
 TAB = ROOT / "memoria" / "tablas"
 
 sweep = json.loads((GPU / "sweep_results.json").read_text())
-v3 = json.loads((GPU / "results_exp12_v3.json").read_text())
+fair = json.loads((GPU / "results_exp12_fair.json").read_text())  # fair LoRA (lr 1e-4)
+lora32 = fair["fedlora"]["acc"]   # the only fairly-tuned LoRA point (32B)
 
 rows = []
 for r in sweep:
@@ -27,9 +28,9 @@ for r in sweep:
         continue
     rows.append((r["model"].split("/")[-1], r["params_b"], r["zero_shot"],
                  r["fedresprompt_acc"], r["comm_ratio"]))
-# add the 32B run (from exp12 v3)
-rows.append(("Qwen2.5-32B", 32.0, round(v3["fedresprompt"]["zero_shot"], 3),
-             round(v3["fedresprompt"]["acc"], 3), round(v3["comm_ratio"], 1)))
+# add the 32B run (fair comparison)
+rows.append(("Qwen2.5-32B", 32.0, round(fair["fedresprompt"]["zero_shot"], 3),
+             round(fair["fedresprompt"]["acc"], 3), round(fair["comm_ratio"], 1)))
 rows.sort(key=lambda x: x[1])
 
 # ---- figure: FedResPrompt vs zero-shot accuracy by model -------------------
@@ -39,6 +40,10 @@ labels = [f"{m}\n{p:.1f}B" for m, p, *_ in rows]
 x = range(len(rows))
 ax.bar(x, [r[3] for r in rows], width=0.6, color="#4C72B0", label="FedResPrompt")
 ax.plot(x, [r[2] for r in rows], "o--", color="#C44E52", label="zero-shot")
+# the one fairly-tuned Federated LoRA point (32B) -> honest reference
+i32 = next(i for i, r in enumerate(rows) if r[1] == 32.0)
+ax.plot([i32], [lora32], "D", color="#55A868", markersize=9,
+        label="Federated LoRA (tuned, 32B)")
 ax.axhline(0.5, color="grey", ls=":", lw=1, label="chance")
 ax.set_xticks(list(x)); ax.set_xticklabels(labels, fontsize=8)
 ax.set_ylim(0.4, 1.0); ax.set_ylabel("SST-2 test accuracy")
@@ -55,8 +60,10 @@ lines = [
     r"clients, on an H200 GPU). A fixed reservoir + a tiny trained controller "
     r"reach high accuracy at scale across two model families, communicating "
     r"$8$--$25\times$ fewer floats per round than Federated LoRA while the edge "
-    r"never runs the LLM. (A fully LR-tuned LoRA accuracy baseline is left to "
-    r"future work; the communication factor is architectural.)}",
+    r"never runs the LLM. In the one fairly-tuned head-to-head (32\,B), Federated "
+    r"LoRA is \emph{more accurate} ($0.93$ vs.\ $0.83$) but at $25\times$ the "
+    r"communication: FedResPrompt trades accuracy for communication/edge "
+    r"efficiency, it does not dominate LoRA.}",
     r"  \label{tab:exp12-gpu-scale}",
     r"  \begin{tabular}{lrrrr}", r"    \toprule",
     r"    Model & Params & Zero-shot & FedResPrompt & Comm.\ saving \\",

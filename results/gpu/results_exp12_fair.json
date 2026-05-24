@@ -1,0 +1,22 @@
+{
+  "model": "Qwen/Qwen2.5-32B",
+  "load": "bf16",
+  "task": "sst2",
+  "classes": [" negative", " positive"],
+  "clients": 4,
+  "rounds": 12,
+  "chance": 0.5,
+  "note": "fair comparison: LoRA with its own lower lr (1e-4); LoRA learns properly here",
+  "fedresprompt": {
+    "acc": 0.826171875,
+    "history": [0.75390625, 0.73828125, 0.7421875, 0.759765625, 0.8515625, 0.86328125, 0.794921875, 0.765625, 0.822265625, 0.828125, 0.927734375, 0.814453125, 0.826171875],
+    "comm_floats_per_round": 330880,
+    "zero_shot": 0.75390625
+  },
+  "fedlora": {
+    "acc": 0.927734375,
+    "history": [0.701171875, 0.818359375, 0.87890625, 0.9140625, 0.93359375, 0.931640625, 0.9453125, 0.9453125, 0.943359375, 0.9453125, 0.94140625, 0.935546875, 0.927734375],
+    "comm_floats_per_round": 8388608
+  },
+  "comm_ratio": 25.352417794970986
+}

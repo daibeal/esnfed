@@ -79,4 +79,24 @@ lm = TransformersLM("Qwen/Qwen2.5-0.5B")   # needs torch + transformers
 loss, grad = lm.loss_and_grad(prompt, target_token_id)
 ```
 
+## At scale on a GPU (honest comparison)
+
+On a rented H200, FedResPrompt was run on real frozen LLMs and a real task
+(SST-2 sentiment, 4 non-i.i.d. clients). A fixed reservoir + a tiny controller
+steer the frozen model to high accuracy across **two families** — Qwen2.5-7B
+**0.92**, 14B **0.96**, Mistral-7B **0.95**, 32B **0.83** (peak 0.93), from
+zero-shot 0.59–0.82 — transmitting only the controller (**8–25× fewer floats/round**
+than Federated LoRA) and **never running the LLM on the client**.
+
+!!! warning "It does not beat a well-tuned LoRA on accuracy"
+    In the one fairly-tuned head-to-head (32B), **Federated LoRA is more accurate
+    (0.93 vs 0.83)** — but at **25× the communication** and requiring the client
+    to run the full LLM. FedResPrompt is a **communication- and edge-efficient
+    alternative** (minimal bandwidth, no on-device LLM), not an accuracy-superior
+    replacement. It occupies a cheaper corner of the trade-off, it does not
+    dominate it.
+
+(Scripts: `experiments/exp12_fedresprompt_gpu.py`, `exp12_sweep.py`,
+`exp13_pareto.py`; raw results in `results/gpu/`.)
+
 See the [API reference](api.md#esnfedllm_orchestration).
