@@ -64,9 +64,12 @@
       connections; colour is the activation as the input drives the network, and
       node size grows with degree (so scale-free <b>hubs</b> stand out). Switch the
       <b>structure</b> — ring, small-world, scale-free or random — to see how
-      connectivity changes the dynamics. Raise the spectral radius toward 1 for
-      long-lived "echoes"; push past 1 and the echo state property is lost
-      (activations stop fading). Pick an input and press play.</p>
+      connectivity changes the dynamics. The right panel runs the <b>echo state
+      test</b>: two copies start from <i>different</i> states and get the
+      <i>same</i> input — if their distance shrinks to zero, the network has
+      forgotten where it started (the echo state property holds). A spectral
+      radius below 1 guarantees this; raising it lengthens the memory (the start is
+      forgotten more slowly). Pick an input and press play.</p>
     <div class="grid2">
       <canvas id="resCanvas" height="360"></canvas>
       <canvas id="traceCanvas" height="360"></canvas>
@@ -315,7 +318,7 @@ function diverge(v){ // -1..1 -> color
 (function(){
   const cv=document.getElementById('resCanvas'), tc=document.getElementById('traceCanvas');
   if(!cv)return;
-  let res,x,t,playing=false,signal=[],trace=[],traceN=[[],[],[],[]],raf=null,seed=12345;
+  let res,x,x2,t,playing=false,signal=[],echo=[],raf=null,seed=12345;
   const N=()=>+document.getElementById('resN').value;
   const TOPO=()=>document.getElementById('resTopo').value;
   function genSignal(kind,T){const s=new Array(T);for(let i=0;i<T;i++){
@@ -326,8 +329,11 @@ function diverge(v){ // -1..1 -> color
   function rebuild(){
     const rho=+document.getElementById('resRho').value, n=N();
     res=makeReservoirTopo(TOPO(),n,rho,seed); x=new Float64Array(n); t=0;
+    // a second copy from a DIFFERENT initial state (for the echo state test)
+    x2=new Float64Array(n); const g=mulberry32((seed^0x9e3779b9)>>>0);
+    for(let i=0;i<n;i++)x2[i]=2*g()-1;
     signal=genSignal(document.getElementById('resInput').value,100000);
-    trace=[]; traceN=[[],[],[],[]];
+    echo=[];
   }
   function draw(){
     const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
@@ -349,22 +355,26 @@ function diverge(v){ // -1..1 -> color
   }
   function drawTrace(){
     const {ctx,w,h}=fit(tc);ctx.clearRect(0,0,w,h);
-    const cols=[css('--blue'),css('--green'),css('--red'),css('--orange')];
-    const M=160, pad=24, mid=h/2;
-    ctx.strokeStyle=css('--line');ctx.beginPath();ctx.moveTo(pad,mid);ctx.lineTo(w-6,mid);ctx.stroke();
-    ctx.fillStyle=css('--muted');ctx.font='11px system-ui';ctx.textAlign='left';
-    ctx.fillText('input + sample neuron activations (scrolling)',pad,16);
-    function line(arr,color){ctx.strokeStyle=color;ctx.beginPath();
-      for(let i=0;i<arr.length;i++){const xx=pad+(w-pad-6)*i/M;const yy=mid-arr[i]*(mid-pad);
-        i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);}ctx.stroke();}
-    ctx.lineWidth=2;line(trace,css('--accent'));ctx.lineWidth=1.5;
-    for(let k=0;k<4;k++)line(traceN[k],cols[k]);
+    const pad=26, base=h-26, top=48, M=160;
+    ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='left';
+    ctx.fillText('echo state test — two runs, different starts, same input',pad-10,18);
+    ctx.fillText('distance → 0  ⇒  the initial state is forgotten (ESP holds)',pad-10,34);
+    ctx.strokeStyle=css('--line');ctx.beginPath();ctx.moveTo(pad,base);ctx.lineTo(w-6,base);ctx.stroke();
+    const maxd=Math.max(0.6,...echo);
+    ctx.strokeStyle=css('--accent');ctx.lineWidth=2.4;ctx.beginPath();
+    for(let i=0;i<echo.length;i++){const xx=pad+(w-pad-6)*i/M;
+      const yy=base-(base-top)*Math.min(echo[i],maxd)/maxd;
+      i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);}
+    ctx.stroke();ctx.lineWidth=1;
+    const cur=echo.length?echo[echo.length-1]:0;
+    ctx.fillStyle=css('--accent');ctx.textAlign='right';
+    ctx.fillText('distance '+cur.toFixed(3)+(cur<0.05?'  forgotten ✓':''),w-8,top-4);
   }
   function step(){
-    const a=+document.getElementById('resLeak').value;
-    stepState(res,x,signal[t]||0,a,1);
-    trace.push(signal[t]||0); if(trace.length>160)trace.shift();
-    for(let k=0;k<4;k++){traceN[k].push(x[k*Math.floor(res.N/4)%res.N]); if(traceN[k].length>160)traceN[k].shift();}
+    const a=+document.getElementById('resLeak').value, u=signal[t]||0;
+    stepState(res,x,u,a,1); stepState(res,x2,u,a,1);   // same input, two starts
+    let d=0;for(let i=0;i<res.N;i++)d+=(x[i]-x2[i])**2;
+    echo.push(Math.sqrt(d)); if(echo.length>160)echo.shift();
     t++;
   }
   function loop(){ if(!playing)return; step(); draw(); drawTrace(); raf=requestAnimationFrame(loop);}
