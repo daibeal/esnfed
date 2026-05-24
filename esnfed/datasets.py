@@ -28,14 +28,16 @@ from __future__ import annotations
 
 import csv
 import io
-import ssl
-import urllib.request
 import warnings
 import zipfile
 from pathlib import Path
 from typing import NamedTuple
 
 import numpy as np
+
+# Note: ``ssl`` and ``urllib`` are imported lazily inside the download helpers,
+# so ``import esnfed`` works in environments without them (e.g. Pyodide /
+# JupyterLite in the browser, where the synthetic datasets are used).
 
 _DATA_DIR = Path(__file__).parent / "data"
 
@@ -48,7 +50,12 @@ def _cache_dir(cache_dir=None) -> Path:
 
 def _urlopen(url: str, timeout: float):
     """Open a URL, retrying without TLS verification if the certificate chain
-    cannot be validated (some data hosts ship an incomplete chain)."""
+    cannot be validated (some data hosts ship an incomplete chain). ``ssl`` and
+    ``urllib`` are imported here (not at module load) so the package imports in
+    environments that lack them, such as Pyodide."""
+    import ssl
+    import urllib.error
+    import urllib.request
     req = urllib.request.Request(url, headers={"User-Agent": "esnfed"})
     try:
         return urllib.request.urlopen(req, timeout=timeout)
@@ -291,8 +298,7 @@ def load_fred(
         text = cached.read_text(encoding="utf-8")
     else:
         url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-        req = urllib.request.Request(url, headers={"User-Agent": "esnfed"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _urlopen(url, timeout) as resp:
             text = resp.read().decode("utf-8")
         cached.write_text(text, encoding="utf-8")
     series = _column_from_csv(text, series_id)
