@@ -389,6 +389,11 @@ function onResize(cv,fn){
   }
   function step(){
     const a=+document.getElementById('resLeak').value, u=signal[t]||0;
+    // periodically restart the second run from a fresh random state, so the
+    // echo-state test *repeats* (distance jumps up, then decays to 0 again)
+    // instead of flat-lining forever once it has first converged
+    if(t>0 && t%80===0){const g=mulberry32((seed^(t*2654435761))>>>0);
+      for(let i=0;i<res.N;i++)x2[i]=2*g()-1;}
     stepState(res,x,u,a,1); stepState(res,x2,u,a,1);   // same input, two starts
     let d=0;for(let i=0;i<res.N;i++)d+=(x[i]-x2[i])**2;
     echo.push(Math.sqrt(d)); if(echo.length>160)echo.shift();
