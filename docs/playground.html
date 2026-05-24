@@ -80,15 +80,24 @@
       <label class="ctl">structure
         <select id="resTopo">
           <option value="ring">ring</option>
+          <option value="chain">chain (delay line)</option>
+          <option value="lattice">lattice (grid)</option>
           <option value="small_world" selected>small-world</option>
           <option value="scale_free">scale-free</option>
+          <option value="modular">modular (communities)</option>
+          <option value="star">star / hubs</option>
           <option value="random">random</option>
         </select></label>
       <label class="ctl">input
         <select id="resInput">
           <option value="impulse">impulse</option>
+          <option value="pulses">pulse train</option>
           <option value="sine" selected>sine</option>
+          <option value="two_tone">two-tone</option>
           <option value="square">square</option>
+          <option value="sawtooth">sawtooth</option>
+          <option value="chirp">chirp</option>
+          <option value="walk">random walk</option>
           <option value="noise">noise</option>
         </select></label>
       <label class="ctl">spectral radius ρ = <b id="resRhoV">0.95</b>
@@ -198,6 +207,19 @@ function makeReservoirTopo(kind,N,rho,seed){
     for(let i=m+1;i<N;i++){const chosen=new Set();let g=0;
       while(chosen.size<m&&g++<2000){const t=targets.length?targets[Math.floor(rng()*targets.length)]:Math.floor(rng()*i);if(t!==i)chosen.add(t);}
       chosen.forEach(t=>{add(i,t);add(t,i);targets.push(i,t);});}
+  }else if(kind==='chain'){            // open delay line (feed-forward path)
+    for(let i=0;i<N-1;i++)add(i,i+1);
+  }else if(kind==='lattice'){          // 2-D grid, 4-neighbour
+    const cols=Math.ceil(Math.sqrt(N));
+    for(let i=0;i<N;i++){ if((i%cols)!==cols-1&&i+1<N)add(i,i+1); if(i+cols<N)add(i,i+cols); }
+  }else if(kind==='modular'){          // communities: dense within, sparse between
+    const G=4, gs=Math.ceil(N/G);
+    for(let i=0;i<N;i++)for(let j=0;j<N;j++){const same=Math.floor(i/gs)===Math.floor(j/gs);
+      if(rng()<(same?0.16:0.008))add(i,j);}
+  }else if(kind==='star'){             // a few hubs, every node attaches to one
+    const H=Math.max(1,Math.round(N/20));
+    for(let h=0;h<H;h++)add(h,(h+1)%H);
+    for(let i=H;i<N;i++){const hub=i%H;add(i,hub);add(hub,i);}
   }else{ // small_world: ring lattice (k each side) + random rewiring
     const k=2,p=0.18;
     for(let i=0;i<N;i++)for(let d=1;d<=k;d++)add(i,(i+d)%N);
@@ -224,6 +246,22 @@ function layoutNodes(kind,n,deg,w,h){
   }else if(kind==='random'){
     for(let i=0;i<n;i++){const ang=2*Math.PI*i/n;const jr=R*(0.6+0.36*(((i*2654435761)>>>0)%1000)/1000);
       pos[i]=[cx+jr*Math.cos(ang),cy+jr*Math.sin(ang)];}
+  }else if(kind==='chain'){
+    const m=30;for(let i=0;i<n;i++)pos[i]=[m+(w-2*m)*(n>1?i/(n-1):0.5),cy+R*0.45*Math.sin(i*0.6)];
+  }else if(kind==='lattice'){
+    const cols=Math.ceil(Math.sqrt(n)),m=28;const sx=(w-2*m)/Math.max(1,cols-1),
+      sy=(h-2*m)/Math.max(1,Math.ceil(n/cols)-1);
+    for(let i=0;i<n;i++)pos[i]=[m+(i%cols)*sx,m+Math.floor(i/cols)*sy];
+  }else if(kind==='modular'){
+    const G=4,gs=Math.ceil(n/G);
+    for(let i=0;i<n;i++){const g=Math.floor(i/gs),ga=2*Math.PI*g/G;
+      const gcx=cx+R*0.55*Math.cos(ga),gcy=cy+R*0.55*Math.sin(ga);
+      const a2=2*Math.PI*(i%gs)/Math.max(1,gs),rr=R*0.26*(0.45+0.55*(((i*2654435761)>>>0)%1000)/1000);
+      pos[i]=[gcx+rr*Math.cos(a2),gcy+rr*Math.sin(a2)];}
+  }else if(kind==='star'){
+    const H=Math.max(1,Math.round(n/20));
+    for(let i=0;i<n;i++){if(i<H){const a2=2*Math.PI*i/Math.max(1,H);pos[i]=[cx+R*0.16*Math.cos(a2),cy+R*0.16*Math.sin(a2)];}
+      else{const a2=2*Math.PI*(i-H)/Math.max(1,n-H);pos[i]=[cx+R*Math.cos(a2),cy+R*Math.sin(a2)];}}
   }else{ // ring, small_world
     for(let i=0;i<n;i++){const ang=2*Math.PI*i/n;pos[i]=[cx+R*Math.cos(ang),cy+R*Math.sin(ang)];}
   }
@@ -336,10 +374,15 @@ function onResize(cv,fn){
   let res,x,x2,t,playing=false,signal=[],echo=[],raf=null,seed=12345;
   const N=()=>+document.getElementById('resN').value;
   const TOPO=()=>document.getElementById('resTopo').value;
-  function genSignal(kind,T){const s=new Array(T);for(let i=0;i<T;i++){
+  function genSignal(kind,T){const s=new Array(T);let rw=0;for(let i=0;i<T;i++){
     if(kind==='impulse')s[i]=(i===6)?1:0;
+    else if(kind==='pulses')s[i]=(i%70===6)?1:0;
     else if(kind==='sine')s[i]=0.5*Math.sin(i*0.18);
+    else if(kind==='two_tone')s[i]=0.32*Math.sin(i*0.18)+0.24*Math.sin(i*0.066);
     else if(kind==='square')s[i]=(Math.floor(i/14)%2)?0.5:-0.5;
+    else if(kind==='sawtooth')s[i]=0.5*(2*((i/22)%1)-1);
+    else if(kind==='chirp'){const p=i%600;s[i]=0.5*Math.sin(0.05*p+0.0006*p*p);}
+    else if(kind==='walk'){rw=Math.max(-0.6,Math.min(0.6,rw+0.08*(Math.random()-0.5)));s[i]=rw;}
     else s[i]=0.6*(Math.random()-0.5);} return s;}
   function rebuild(){
     const rho=+document.getElementById('resRho').value, n=N();
