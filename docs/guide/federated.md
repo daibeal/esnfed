@@ -26,6 +26,11 @@ W_out = federated.federated_ridge(clients, ref)
     A unit test asserts `federated_ridge` equals centralized training to within
     `1e-9`. The privacy gain (raw data stays local) costs nothing in accuracy.
 
+Federated ridge holds its accuracy as the federation grows, while local-only
+training degrades (interactive — see the [gallery](../gallery.md) for more):
+
+<iframe src="../../plotly/result_exp3_scaling.html" width="100%" height="430" frameborder="0"></iframe>
+
 ### Iterative FedAvg
 
 For comparison, the readout can also be trained with iterative

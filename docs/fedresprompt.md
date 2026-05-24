@@ -62,6 +62,8 @@ full forward/backward on the edge.
 
 *(`experiments/exp7_fedres_prompt.py`; 10 soft-prompt tokens vs. rank-8 LoRA on all layers.)*
 
+<iframe src="../plotly/result_exp7_fedresprompt.html" width="100%" height="440" frameborder="0"></iframe>
+
 ## Validated on a real Qwen
 
 With a frozen **Qwen2.5-0.5B** as the server LLM (`TransformersLM`), two

@@ -110,6 +110,7 @@ nav:
     - Interoperability: guide/interop.md
   - Performance: performance.md
   - Examples: examples.md
+  - Gallery: gallery.md
   - Tutorial (notebook): tutorial.ipynb
   - FedResPrompt: fedresprompt.md
   - Results database: results.md

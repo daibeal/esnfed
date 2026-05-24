@@ -55,6 +55,16 @@ to combine:
 
 ![Reservoir echoes](animations/reservoir_echoes.gif){ width="560" }
 
+### Headline result — federation is essential on real data
+
+On the real counterparty-risk series, exact federated ridge stays accurate as the
+federation grows while local-only training **collapses** (interactive, log scale):
+
+<iframe src="plotly/result_exp6_finance.html" width="100%" height="430" frameborder="0"></iframe>
+
+See the full [**gallery**](gallery.md) of interactive result charts, the
+[playground](playground.html), and the queryable [results database](results.md).
+
 ## What's inside
 
 <div class="grid cards" markdown>
