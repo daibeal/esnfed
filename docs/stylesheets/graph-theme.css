@@ -1,0 +1,72 @@
+/* ============================================================================
+   Graph-themed look for the esnfed docs: a network loading screen, a subtle
+   "node grid" background, and small graph-node accents on headings.
+   ========================================================================== */
+
+/* ---- network loading screen --------------------------------------------- */
+#graph-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: radial-gradient(circle at 50% 42%, #1b2036 0%, #0d0f1c 70%);
+  transition: opacity 0.42s ease;
+}
+#graph-loader.gl-done { opacity: 0; pointer-events: none; }
+#graph-loader #gl-canvas { max-width: 90vw; }
+#graph-loader .gl-label {
+  font: 600 22px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.2em;
+  color: #cfc8ff;
+  opacity: 0.92;
+}
+#graph-loader .gl-label::after {
+  content: "";
+  display: block;
+  width: 120px;
+  height: 2px;
+  margin: 12px auto 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #7c6cff, transparent);
+  animation: gl-scan 1.1s ease-in-out infinite;
+}
+@keyframes gl-scan { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+/* never linger / never show with reduced motion */
+html:not(.gl-loading) #graph-loader { display: none; }
+@media (prefers-reduced-motion: reduce) { #graph-loader { display: none !important; } }
+
+/* ---- "node grid" page background ---------------------------------------- */
+.md-main {
+  background-image: radial-gradient(rgba(124, 108, 255, 0.10) 1px, transparent 1.4px);
+  background-size: 24px 24px;
+}
+[data-md-color-scheme="slate"] .md-main {
+  background-image: radial-gradient(rgba(138, 124, 255, 0.16) 1px, transparent 1.4px);
+}
+
+/* ---- graph-node accent on section headings ------------------------------ */
+.md-typeset h2 { display: flex; align-items: center; }
+.md-typeset h2::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-right: 0.55rem;
+  border-radius: 50%;
+  background: var(--md-accent-fg-color);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent);
+}
+
+/* ---- a touch of "edge" gradient under the page title -------------------- */
+.md-typeset h1 {
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--md-accent-fg-color), transparent) 1;
+  padding-bottom: 0.2em;
+}
+
+/* slightly bolder, graph-ish tabs */
+.md-tabs { font-weight: 600; }

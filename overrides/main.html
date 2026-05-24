@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{#- Graph-themed loading screen, shown once per session on the first (hard) load.
+    The gate runs in <head> so the overlay never flashes on instant navigation. -#}
+{% block extrahead %}
+  {{ super() }}
+  <script>
+    (function () {
+      try {
+        if (sessionStorage.getItem("gl_shown")) return;     // not on instant nav
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        sessionStorage.setItem("gl_shown", "1");
+      } catch (e) { return; }
+      document.documentElement.classList.add("gl-loading");
+      (function inject() {
+        if (!document.body) { requestAnimationFrame(inject); return; }
+        var o = document.createElement("div");
+        o.id = "graph-loader";
+        o.setAttribute("aria-hidden", "true");
+        o.innerHTML = '<canvas id="gl-canvas"></canvas><div class="gl-label">esnfed</div>';
+        document.body.appendChild(o);
+      })();
+    })();
+  </script>
+{% endblock %}
