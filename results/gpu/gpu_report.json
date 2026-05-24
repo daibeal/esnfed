@@ -1,0 +1,50 @@
+{
+  "hardware": {
+    "gpu": {
+      "name": "NVIDIA H200",
+      "vram_gb": 150.1,
+      "sm_count": 132,
+      "capability": "9.0",
+      "torch": "2.11.0+cu130",
+      "cuda": "13.0"
+    },
+    "platform": "Linux-6.17.0-1009-aws-x86_64-with-glibc2.39",
+    "nvidia_smi": "Sun May 24 18:07:38 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 580.126.16             Driver Version: 580.126.16     CUDA Version: 13.0     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA H200                    On  |   00000000:8C:00.0 Off |                    0 |\n| N/A   33C    P0             75W /  700W |       4MiB / 143771MiB |      0%      Default |\n|                                         |                        |             Disabled |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|  No running processes found                                                             |\n+-----------------------------------------------------------------------------------------+",
+    "lscpu": "Model name:                              Intel(R) Xeon(R) Platinum 8488C\nThread(s) per core:                      2\nCore(s) per socket:                      48\nSocket(s):                               2",
+    "mem": "total        used        free      shared  buff/cache   available\nMem:           2.0Ti        76Gi       564Gi       1.4Gi       1.3Ti       1.9Ti",
+    "disk": "overlay         335G   62G  274G  19% /"
+  },
+  "matmul_bf16_tflops_n8192": 790.5,
+  "reservoir_harvest_gpu": [
+    {
+      "N": 500,
+      "steps_per_sec": 13497.8,
+      "vram_gb": 0.03
+    },
+    {
+      "N": 1000,
+      "steps_per_sec": 14202.4,
+      "vram_gb": 0.04
+    },
+    {
+      "N": 2000,
+      "steps_per_sec": 14076.4,
+      "vram_gb": 0.05
+    },
+    {
+      "N": 4000,
+      "steps_per_sec": 14057.4,
+      "vram_gb": 0.1
+    },
+    {
+      "N": 8000,
+      "steps_per_sec": 9413.9,
+      "vram_gb": 0.29
+    },
+    {
+      "N": 16000,
+      "steps_per_sec": 3526.9,
+      "vram_gb": 1.06
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "model": "Qwen/Qwen2.5-32B",
+  "task": "sst2",
+  "fedresprompt": [
+    {
+      "prompt_tokens": 1,
+      "acc": 0.8965,
+      "comm_floats": 85120
+    },
+    {
+      "prompt_tokens": 2,
+      "acc": 0.877,
+      "comm_floats": 167040
+    }
+  ],
+  "fedlora": []
+}

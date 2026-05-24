@@ -1,0 +1,101 @@
+[
+  {
+    "model": "Qwen/Qwen2.5-0.5B",
+    "params_b": 0.49,
+    "d": 896,
+    "load_s": 5.7,
+    "vram_gb": 1.0,
+    "task": "sst2",
+    "classes": [
+      " negative",
+      " positive"
+    ],
+    "chance": 0.5,
+    "zero_shot": 0.541,
+    "fedresprompt_acc": 0.6074,
+    "fedlora_acc": 0.6348,
+    "fp_comm_floats": 60544,
+    "lora_comm_floats": 540672,
+    "comm_ratio": 8.9
+  },
+  {
+    "model": "Qwen/Qwen2.5-3B",
+    "params_b": 3.09,
+    "d": 2048,
+    "load_s": 8.2,
+    "vram_gb": 6.2,
+    "task": "sst2",
+    "classes": [
+      " negative",
+      " positive"
+    ],
+    "chance": 0.5,
+    "zero_shot": 0.6113,
+    "fedresprompt_acc": 0.5332,
+    "fedlora_acc": 0.4805,
+    "fp_comm_floats": 134272,
+    "lora_comm_floats": 1843200,
+    "comm_ratio": 13.7
+  },
+  {
+    "model": "Qwen/Qwen2.5-7B",
+    "params_b": 7.62,
+    "d": 3584,
+    "load_s": 11.1,
+    "vram_gb": 15.3,
+    "task": "sst2",
+    "classes": [
+      " negative",
+      " positive"
+    ],
+    "chance": 0.5,
+    "zero_shot": 0.8203,
+    "fedresprompt_acc": 0.9219,
+    "fedlora_acc": 0.4766,
+    "fp_comm_floats": 232576,
+    "lora_comm_floats": 2523136,
+    "comm_ratio": 10.8
+  },
+  {
+    "model": "Qwen/Qwen2.5-14B",
+    "params_b": 14.77,
+    "d": 5120,
+    "load_s": 14.0,
+    "vram_gb": 29.6,
+    "task": "sst2",
+    "classes": [
+      " negative",
+      " positive"
+    ],
+    "chance": 0.5,
+    "zero_shot": 0.6406,
+    "fedresprompt_acc": 0.957,
+    "fedlora_acc": 0.5195,
+    "fp_comm_floats": 330880,
+    "lora_comm_floats": 6291456,
+    "comm_ratio": 19.0
+  },
+  {
+    "model": "mistralai/Mistral-7B-v0.3",
+    "params_b": 7.25,
+    "d": 4096,
+    "load_s": 24.3,
+    "vram_gb": 14.6,
+    "task": "sst2",
+    "classes": [
+      " negative",
+      " positive"
+    ],
+    "chance": 0.5,
+    "zero_shot": 0.5938,
+    "fedresprompt_acc": 0.9531,
+    "fedlora_acc": 0.5195,
+    "fp_comm_floats": 265344,
+    "lora_comm_floats": 3407872,
+    "comm_ratio": 12.8
+  },
+  {
+    "model": "microsoft/Phi-3.5-mini-instruct",
+    "error": "type object 'DynamicCache' has no attribute 'from_legacy_cache'"
+  }
+]
