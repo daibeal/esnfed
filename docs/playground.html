@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>esnfed — interactive playground</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#171a2b; --ink:#e8eaf2; --muted:#9aa3c0;
+    --accent:#7c6cff; --blue:#4C72B0; --green:#55A868; --red:#C44E52;
+    --purple:#8172B3; --orange:#DD8452; --line:#2a2f4a;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f7fb; --panel:#ffffff; --ink:#16182a; --muted:#5b6385; --line:#e4e7f2; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.5}
+  header{padding:28px 20px 8px;max-width:1100px;margin:0 auto}
+  h1{margin:0;font-size:28px;letter-spacing:-.5px}
+  h1 .sw{color:var(--accent)}
+  header p{color:var(--muted);margin:.4em 0 0}
+  header a{color:var(--accent);text-decoration:none}
+  main{max-width:1100px;margin:0 auto;padding:10px 20px 60px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+        padding:18px 18px 20px;margin:18px 0;box-shadow:0 6px 24px rgba(0,0,0,.12)}
+  .card h2{margin:0 0 2px;font-size:19px}
+  .card .desc{color:var(--muted);margin:.2em 0 14px;font-size:14px}
+  canvas{width:100%;display:block;border-radius:10px;background:transparent}
+  .controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;margin:14px 0 2px}
+  .ctl{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);min-width:120px}
+  .ctl b{color:var(--ink);font-variant-numeric:tabular-nums}
+  input[type=range]{width:150px;accent-color:var(--accent)}
+  button,select{background:var(--accent);color:#fff;border:0;border-radius:8px;
+        padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  select{background:var(--panel);color:var(--ink);border:1px solid var(--line);font-weight:500}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;margin-top:10px}
+  .legend span{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+  .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .grid2{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:760px){.grid2{grid-template-columns:1.5fr 1fr}}
+  footer{max-width:1100px;margin:0 auto;padding:0 20px 50px;color:var(--muted);font-size:13px}
+  .pill{font-size:11px;background:var(--line);color:var(--muted);padding:2px 8px;border-radius:999px}
+</style>
+</head>
+<body>
+<header>
+  <h1>esnfed <span class="sw">playground</span></h1>
+  <p>Everything here runs live in your browser — a tiny Echo State Network
+     (reservoir + ridge readout) implemented in plain JavaScript. Drag the
+     sliders, press play, re-roll the reservoirs, and watch it move.
+     &nbsp;<a href="./">← back to the docs</a></p>
+</header>
+<main>
+
+  <!-- WIDGET 1: reservoir activations -->
+  <section class="card">
+    <h2>1 · Reservoir activations <span class="pill">how it reacts to input</span></h2>
+    <p class="desc">Each dot is a reservoir neuron; colour is its activation as the
+      input drives the network. Raise the spectral radius toward 1 for long-lived
+      "echoes"; push past 1 and the echo state property is lost (activations stop
+      fading). Pick an input and press play.</p>
+    <div class="grid2">
+      <canvas id="resCanvas" height="360"></canvas>
+      <canvas id="traceCanvas" height="360"></canvas>
+    </div>
+    <div class="controls">
+      <button id="resPlay">▶ play</button>
+      <button class="ghost" id="resReset">reset</button>
+      <label class="ctl">input
+        <select id="resInput">
+          <option value="impulse">impulse</option>
+          <option value="sine" selected>sine</option>
+          <option value="square">square</option>
+          <option value="noise">noise</option>
+        </select></label>
+      <label class="ctl">spectral radius ρ = <b id="resRhoV">0.95</b>
+        <input type="range" id="resRho" min="0.1" max="1.3" step="0.01" value="0.95"></label>
+      <label class="ctl">leaking rate a = <b id="resLeakV">0.30</b>
+        <input type="range" id="resLeak" min="0.05" max="1" step="0.05" value="0.30"></label>
+      <label class="ctl">neurons N = <b id="resNV">60</b>
+        <input type="range" id="resN" min="12" max="120" step="4" value="60"></label>
+      <button class="ghost" id="resReroll">re-roll</button>
+    </div>
+  </section>
+
+  <!-- WIDGET 2: strategies -->
+  <section class="card">
+    <h2>2 · Central vs Federated vs Local vs Ensemble <span class="pill">the strategies</span></h2>
+    <p class="desc">A memory+nonlinearity task is split across clients. Watch the
+      predictions get traced out. <b>Federated</b> ridge pools the clients' summary
+      statistics and lands exactly on <b>centralized</b>. <b>Local-only</b> models
+      degrade as each client is starved of data. The <b>ensemble</b> averages
+      heterogeneous reservoirs and sits in between. Bars show test NRMSE (lower is
+      better).</p>
+    <div class="grid2">
+      <canvas id="stratCanvas" height="340"></canvas>
+      <canvas id="barCanvas" height="340"></canvas>
+    </div>
+    <div class="controls">
+      <button id="stratPlay">▶ replay</button>
+      <label class="ctl">clients K = <b id="stratKV">6</b>
+        <input type="range" id="stratK" min="1" max="10" step="1" value="6"></label>
+      <label class="ctl">spectral radius ρ = <b id="stratRhoV">0.90</b>
+        <input type="range" id="stratRho" min="0.3" max="1.2" step="0.01" value="0.90"></label>
+      <button class="ghost" id="stratReroll">re-roll reservoirs</button>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--blue)"></i>centralized</span>
+      <span><i class="dot" style="background:var(--green)"></i>federated (= centralized)</span>
+      <span><i class="dot" style="background:var(--red)"></i>local-only (mean)</span>
+      <span><i class="dot" style="background:var(--purple)"></i>ensemble</span>
+      <span><i class="dot" style="background:var(--muted)"></i>target</span>
+    </div>
+  </section>
+
+  <!-- WIDGET 3: memory capacity -->
+  <section class="card">
+    <h2>3 · Short-term memory <span class="pill">how far back it remembers</span></h2>
+    <p class="desc">Can the reservoir reconstruct the input it saw <i>k</i> steps
+      ago? Each bar is the recovery (R², 0–1) at delay <i>k</i>. Memory fades with
+      delay, and reaches further as the spectral radius approaches 1.</p>
+    <canvas id="memCanvas" height="280"></canvas>
+    <div class="controls">
+      <button id="memRun">▶ measure</button>
+      <label class="ctl">spectral radius ρ = <b id="memRhoV">0.95</b>
+        <input type="range" id="memRho" min="0.3" max="1.1" step="0.01" value="0.95"></label>
+      <label class="ctl">leaking rate a = <b id="memLeakV">0.70</b>
+        <input type="range" id="memLeak" min="0.1" max="1" step="0.05" value="0.70"></label>
+      <label class="ctl">neurons N = <b id="memNV">80</b>
+        <input type="range" id="memN" min="20" max="150" step="5" value="80"></label>
+    </div>
+  </section>
+
+</main>
+<footer>
+  Built with the <a href="./" style="color:var(--accent)">esnfed</a> library ·
+  every pixel is computed live (no server). Source:
+  <a href="https://github.com/daibeal/esnfed" style="color:var(--accent)">github.com/daibeal/esnfed</a>
+</footer>
+
+<script>
+"use strict";
+/* ---------- tiny linear algebra + ESN engine (pure JS) ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function randn(rng){let u=0,v=0;while(!u)u=rng();while(!v)v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+function makeReservoir(N,density,rho,seed){
+  const rng=mulberry32(seed);
+  const W=new Float64Array(N*N);
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){ if(rng()<density) W[i*N+j]=2*rng()-1; }
+  // spectral radius via power iteration
+  let v=new Float64Array(N); for(let i=0;i<N;i++)v[i]=randn(rng);
+  let nrm=Math.hypot(...v)||1; for(let i=0;i<N;i++)v[i]/=nrm;
+  let sr=0;
+  for(let it=0;it<40;it++){
+    const w=new Float64Array(N);
+    for(let i=0;i<N;i++){let s=0;for(let j=0;j<N;j++)s+=W[i*N+j]*v[j];w[i]=s;}
+    nrm=Math.hypot(...w); if(nrm===0)break; sr=nrm; for(let i=0;i<N;i++)v[i]=w[i]/nrm;
+  }
+  if(sr>0){const g=rho/sr;for(let i=0;i<N*N;i++)W[i]*=g;}
+  const Win=new Float64Array(N*2); // [bias, input]
+  for(let i=0;i<N;i++){Win[i*2]=2*rng()-1;Win[i*2+1]=2*rng()-1;}
+  return {W,Win,N};
+}
+
+// step the reservoir state in place; returns nothing
+function stepState(res,x,u,a,bias){
+  const {W,Win,N}=res; const xn=new Float64Array(N);
+  for(let i=0;i<N;i++){
+    let pre=Win[i*2]*bias+Win[i*2+1]*u; const row=i*N;
+    for(let j=0;j<N;j++)pre+=W[row+j]*x[j];
+    xn[i]=(1-a)*x[i]+a*Math.tanh(pre);
+  }
+  for(let i=0;i<N;i++)x[i]=xn[i];
+}
+
+// harvest extended states [bias,u,x...] for a 1-D input series
+function harvest(res,u,a,bias){
+  const {N}=res; const T=u.length; const D=2+N; const x=new Float64Array(N);
+  const Z=new Float64Array(T*D);
+  for(let t=0;t<T;t++){
+    stepState(res,x,u[t],a,bias);
+    Z[t*D]=bias; Z[t*D+1]=u[t]; for(let i=0;i<N;i++)Z[t*D+2+i]=x[i];
+  }
+  return {Z,T,D};
+}
+
+// ridge: solve (Z^T Z + beta I) w = Z^T y  (single output)
+function ridge(Z,T,D,y,beta){
+  const A=new Float64Array(D*D), b=new Float64Array(D);
+  for(let t=0;t<T;t++){const o=t*D;
+    for(let i=0;i<D;i++){const zi=Z[o+i]; b[i]+=zi*y[t];
+      for(let j=i;j<D;j++)A[i*D+j]+=zi*Z[o+j];}}
+  for(let i=0;i<D;i++){A[i*D+i]+=beta; for(let j=0;j<i;j++)A[i*D+j]=A[j*D+i];}
+  return solve(A,b,D);
+}
+// accumulate stats only (for federated summation)
+function stats(Z,T,D,y){
+  const A=new Float64Array(D*D), b=new Float64Array(D);
+  for(let t=0;t<T;t++){const o=t*D;
+    for(let i=0;i<D;i++){const zi=Z[o+i]; b[i]+=zi*y[t];
+      for(let j=i;j<D;j++)A[i*D+j]+=zi*Z[o+j];}}
+  return {A,b};
+}
+function solveStats(A,b,D,beta){
+  const M=A.slice(); for(let i=0;i<D;i++){M[i*D+i]+=beta;for(let j=0;j<i;j++)M[i*D+j]=M[j*D+i];}
+  return solve(M,b,D);
+}
+function solve(A,b,D){ // Gaussian elimination with partial pivoting
+  const M=A.slice(), x=b.slice();
+  for(let c=0;c<D;c++){
+    let p=c,mx=Math.abs(M[c*D+c]);
+    for(let r=c+1;r<D;r++){const v=Math.abs(M[r*D+c]);if(v>mx){mx=v;p=r;}}
+    if(p!==c){for(let k=0;k<D;k++){const t=M[c*D+k];M[c*D+k]=M[p*D+k];M[p*D+k]=t;}
+      const t=x[c];x[c]=x[p];x[p]=t;}
+    const piv=M[c*D+c]||1e-12;
+    for(let r=c+1;r<D;r++){const f=M[r*D+c]/piv; if(!f)continue;
+      for(let k=c;k<D;k++)M[r*D+k]-=f*M[c*D+k]; x[r]-=f*x[c];}
+  }
+  const w=new Float64Array(D);
+  for(let r=D-1;r>=0;r--){let s=x[r];for(let k=r+1;k<D;k++)s-=M[r*D+k]*w[k];w[r]=s/(M[r*D+r]||1e-12);}
+  return w;
+}
+function predict(Z,T,D,w){const p=new Float64Array(T);
+  for(let t=0;t<T;t++){let s=0;const o=t*D;for(let i=0;i<D;i++)s+=Z[o+i]*w[i];p[t]=s;}return p;}
+function nrmse(y,p,a,b){let se=0,m=0,n=b-a;for(let t=a;t<b;t++)m+=y[t];m/=n;
+  let vr=0;for(let t=a;t<b;t++){se+=(y[t]-p[t])**2;vr+=(y[t]-m)**2;}return Math.sqrt(se/(vr||1e-12));}
+
+/* ---------- canvas helpers ---------- */
+function fit(cv){const r=window.devicePixelRatio||1;const w=cv.clientWidth;const h=cv.height;
+  cv.width=w*r;cv.height=h*r;const ctx=cv.getContext('2d');ctx.setTransform(r,0,0,r,0,0);return {ctx,w,h};}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function diverge(v){ // -1..1 -> color
+  v=Math.max(-1,Math.min(1,v));
+  if(v>=0)return `rgb(${Math.round(60+v*195)},${Math.round(110-v*60)},${Math.round(110-v*70)})`;
+  return `rgb(${Math.round(60+(-v)*20)},${Math.round(110+(-v)*80)},${Math.round(110+(-v)*120)})`;}
+
+/* =================== WIDGET 1 =================== */
+(function(){
+  const cv=document.getElementById('resCanvas'), tc=document.getElementById('traceCanvas');
+  if(!cv)return;
+  let res,x,t,playing=false,signal=[],trace=[],traceN=[[],[],[],[]],raf=null;
+  const N=()=>+document.getElementById('resN').value;
+  function genSignal(kind,T){const s=new Array(T);for(let i=0;i<T;i++){
+    if(kind==='impulse')s[i]=(i===6)?1:0;
+    else if(kind==='sine')s[i]=0.5*Math.sin(i*0.18);
+    else if(kind==='square')s[i]=(Math.floor(i/14)%2)?0.5:-0.5;
+    else s[i]=0.6*(Math.random()-0.5);} return s;}
+  function rebuild(){
+    const rho=+document.getElementById('resRho').value, n=N();
+    res=makeReservoir(n,0.15,rho,12345); x=new Float64Array(n); t=0;
+    signal=genSignal(document.getElementById('resInput').value,100000);
+    trace=[]; traceN=[[],[],[],[]];
+  }
+  function draw(){
+    const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
+    const n=res.N, cx=w/2, cy=h/2, R=Math.min(w,h)/2-26;
+    // links faint
+    ctx.strokeStyle=css('--line'); ctx.globalAlpha=0.5;
+    // nodes on a ring (or grid for large N)
+    const pos=[];
+    for(let i=0;i<n;i++){const ang=2*Math.PI*i/n;pos.push([cx+R*Math.cos(ang),cy+R*Math.sin(ang)]);}
+    ctx.globalAlpha=1;
+    for(let i=0;i<n;i++){const a=x[i];const rad=4+Math.min(10,Math.abs(a)*12);
+      ctx.beginPath();ctx.fillStyle=diverge(a);ctx.arc(pos[i][0],pos[i][1],rad,0,7);ctx.fill();}
+    // centre input marker
+    const u=signal[t]||0; ctx.fillStyle=css('--accent');
+    ctx.beginPath();ctx.arc(cx,cy,6+Math.abs(u)*16,0,7);ctx.fill();
+    ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='center';
+    ctx.fillText('input '+u.toFixed(2)+'   ·   t='+t,cx,h-8);
+  }
+  function drawTrace(){
+    const {ctx,w,h}=fit(tc);ctx.clearRect(0,0,w,h);
+    const cols=[css('--blue'),css('--green'),css('--red'),css('--orange')];
+    const M=160, pad=24, mid=h/2;
+    ctx.strokeStyle=css('--line');ctx.beginPath();ctx.moveTo(pad,mid);ctx.lineTo(w-6,mid);ctx.stroke();
+    ctx.fillStyle=css('--muted');ctx.font='11px system-ui';ctx.textAlign='left';
+    ctx.fillText('input + sample neuron activations (scrolling)',pad,16);
+    function line(arr,color){ctx.strokeStyle=color;ctx.beginPath();
+      for(let i=0;i<arr.length;i++){const xx=pad+(w-pad-6)*i/M;const yy=mid-arr[i]*(mid-pad);
+        i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);}ctx.stroke();}
+    ctx.lineWidth=2;line(trace,css('--accent'));ctx.lineWidth=1.5;
+    for(let k=0;k<4;k++)line(traceN[k],cols[k]);
+  }
+  function step(){
+    const a=+document.getElementById('resLeak').value;
+    stepState(res,x,signal[t]||0,a,1);
+    trace.push(signal[t]||0); if(trace.length>160)trace.shift();
+    for(let k=0;k<4;k++){traceN[k].push(x[k*Math.floor(res.N/4)%res.N]); if(traceN[k].length>160)traceN[k].shift();}
+    t++;
+  }
+  function loop(){ if(!playing)return; step(); draw(); drawTrace(); raf=requestAnimationFrame(loop);}
+  function play(p){playing=p;document.getElementById('resPlay').textContent=p?'❚❚ pause':'▶ play';
+    if(p){cancelAnimationFrame(raf);loop();}}
+  // wire controls
+  const bind=(id,vid,fn)=>{const e=document.getElementById(id);e.addEventListener('input',()=>{
+    if(vid)document.getElementById(vid).textContent=(+e.value).toFixed(id==='resN'?0:2);fn&&fn();});};
+  bind('resRho','resRhoV',()=>{rebuild();draw();drawTrace();});
+  bind('resLeak','resLeakV');
+  bind('resN','resNV',()=>{rebuild();draw();drawTrace();});
+  document.getElementById('resInput').addEventListener('change',()=>{rebuild();draw();drawTrace();});
+  document.getElementById('resPlay').addEventListener('click',()=>play(!playing));
+  document.getElementById('resReset').addEventListener('click',()=>{rebuild();draw();drawTrace();});
+  document.getElementById('resReroll').addEventListener('click',()=>{rebuild();draw();drawTrace();});
+  rebuild();draw();drawTrace();
+})();
+
+/* =================== WIDGET 2 =================== */
+(function(){
+  const cv=document.getElementById('stratCanvas'), bc=document.getElementById('barCanvas');
+  if(!cv)return;
+  let result=null, anim=0, raf=null;
+  function task(seed){ // memory + nonlinearity, stable
+    const rng=mulberry32(seed), T=520, u=new Array(T), y=new Array(T);
+    for(let i=0;i<T;i++)u[i]=rng()*0.5;
+    for(let i=0;i<T;i++){const a=i>=2?u[i-2]:0,b=i>=5?u[i-5]:0,c=i>=1?u[i-1]:0;
+      y[i]=1.6*a*b+0.3*c+0.05;} return {u,y,T};
+  }
+  function run(){
+    const K=+document.getElementById('stratK').value, rho=+document.getElementById('stratRho').value;
+    const {u,y,T}=task(7); const split=Math.floor(T*0.65), beta=1e-4, a=1.0;
+    const shared=makeReservoir(50,0.15,rho,99);
+    const full=harvest(shared,u,a,1), D=full.D;
+    // centralized
+    const wc=ridge(full.Z.slice(0,split*D),split,D,y.slice(0,split),beta);
+    const pc=predict(full.Z,T,D,wc);
+    // federated: sum stats over K contiguous client blocks
+    let A=new Float64Array(D*D),B=new Float64Array(D);
+    const bounds=[];for(let k=0;k<=K;k++)bounds.push(Math.floor(split*k/K));
+    const locals=[];
+    for(let k=0;k<K;k++){const s=bounds[k],e=bounds[k+1];
+      const st=stats(full.Z.slice(s*D,e*D),e-s,D,y.slice(s,e));
+      for(let i=0;i<D*D;i++)A[i]+=st.A[i];for(let i=0;i<D;i++)B[i]+=st.b[i];
+      const wl=solveStats(st.A,st.b,D,beta);locals.push(predict(full.Z,T,D,wl));}
+    const wf=solveStats(A,B,D,beta); const pf=predict(full.Z,T,D,wf);
+    // local mean prediction
+    const pl=new Float64Array(T);for(let t=0;t<T;t++){let s=0;for(const p of locals)s+=p[t];pl[t]=s/K;}
+    // ensemble: heterogeneous reservoirs, average predictions
+    const pe=new Float64Array(T);
+    for(let k=0;k<K;k++){const r=makeReservoir(50,0.15,rho,200+k);const hv=harvest(r,u,a,1);
+      const wk=ridge(hv.Z.slice(0,split*D),split,D,y.slice(0,split),beta);
+      const pk=predict(hv.Z,T,hv.D,wk);for(let t=0;t<T;t++)pe[t]+=pk[t]/K;}
+    const m=(p)=>nrmse(y,p,split,T);
+    result={u,y,T,split,pc,pf,pl,pe,
+      nr:{central:m(pc),fed:m(pf),local:m(pl),ens:m(pe)}};
+    anim=split; play();
+  }
+  function draw(){
+    const {ctx,w,h}=fit(cv);ctx.clearRect(0,0,w,h); if(!result)return;
+    const {y,T,split,pc,pf,pl,pe}=result; const pad=28;
+    let lo=Infinity,hi=-Infinity;
+    for(let t=split;t<T;t++){for(const v of [y[t],pc[t],pl[t],pe[t]]){if(v<lo)lo=v;if(v>hi)hi=v;}}
+    const X=t=>pad+(w-pad-6)*(t-split)/(T-split-1);
+    const Y=v=>h-pad-(h-2*pad)*(v-lo)/((hi-lo)||1);
+    ctx.fillStyle=css('--muted');ctx.font='11px system-ui';ctx.textAlign='left';
+    ctx.fillText('test-set predictions (animated)',pad,16);
+    const curve=(p,color,wd,dash)=>{ctx.strokeStyle=color;ctx.lineWidth=wd;ctx.setLineDash(dash||[]);
+      ctx.beginPath();for(let t=split;t<=anim&&t<T;t++){const xx=X(t),yy=Y(p[t]);
+        t===split?ctx.moveTo(xx,yy):ctx.lineTo(xx,yy);}ctx.stroke();ctx.setLineDash([]);};
+    curve(y,css('--muted'),2);
+    curve(pl,css('--red'),1.6);
+    curve(pe,css('--purple'),1.6);
+    curve(pc,css('--blue'),2);
+    curve(pf,css('--green'),1.6,[6,4]);
+  }
+  function drawBars(){
+    const {ctx,w,h}=fit(bc);ctx.clearRect(0,0,w,h);if(!result)return;
+    const items=[['central',result.nr.central,css('--blue')],
+      ['federated',result.nr.fed,css('--green')],
+      ['local',result.nr.local,css('--red')],
+      ['ensemble',result.nr.ens,css('--purple')]];
+    const mx=Math.max(1,...items.map(i=>i[1]))*1.1, pad=30, bw=(w-2*pad)/items.length*0.6, gap=(w-2*pad)/items.length;
+    ctx.fillStyle=css('--muted');ctx.font='11px system-ui';ctx.textAlign='center';
+    ctx.fillText('test NRMSE (lower is better)',w/2,16);
+    items.forEach((it,i)=>{const x0=pad+i*gap+gap*0.2;const bh=(h-50)*Math.min(it[1],mx)/mx;
+      ctx.fillStyle=it[2];ctx.fillRect(x0,h-30-bh,bw,bh);
+      ctx.fillStyle=css('--ink');ctx.fillText(it[1].toFixed(3),x0+bw/2,h-34-bh);
+      ctx.fillStyle=css('--muted');ctx.fillText(it[0],x0+bw/2,h-12);});
+  }
+  function loop(){draw();drawBars();if(anim<result.T){anim+=4;raf=requestAnimationFrame(loop);}}
+  function play(){cancelAnimationFrame(raf);loop();}
+  document.getElementById('stratPlay').addEventListener('click',run);
+  document.getElementById('stratReroll').addEventListener('click',run);
+  const sk=document.getElementById('stratK'),sr=document.getElementById('stratRho');
+  sk.addEventListener('input',()=>{document.getElementById('stratKV').textContent=sk.value;run();});
+  sr.addEventListener('input',()=>{document.getElementById('stratRhoV').textContent=(+sr.value).toFixed(2);run();});
+  run();
+})();
+
+/* =================== WIDGET 3 =================== */
+(function(){
+  const cv=document.getElementById('memCanvas'); if(!cv)return;
+  let bars=[],target=[],raf=null,anim=0;
+  function measure(){
+    const rho=+document.getElementById('memRho').value,a=+document.getElementById('memLeak').value,
+      N=+document.getElementById('memN').value;
+    const rng=mulberry32(3), T=600, u=new Array(T);for(let i=0;i<T;i++)u[i]=2*rng()-1;
+    const res=makeReservoir(N,0.2,rho,77); const hv=harvest(res,u,a,1), D=hv.D;
+    const wash=100, split=Math.floor(T*0.7), Kmax=18; target=[];
+    for(let k=1;k<=Kmax;k++){
+      const y=new Array(T);for(let t=0;t<T;t++)y[t]=(t>=k)?u[t-k]:0;
+      const w=ridge(hv.Z.slice(wash*D,split*D),split-wash,D,y.slice(wash,split),1e-6);
+      const p=predict(hv.Z,T,D,w);
+      // R^2 (forecasting power) on test
+      let m=0,n=T-split;for(let t=split;t<T;t++)m+=y[t];m/=n;
+      let ss=0,sr2=0;for(let t=split;t<T;t++){ss+=(y[t]-p[t])**2;sr2+=(y[t]-m)**2;}
+      target.push(Math.max(0,1-ss/(sr2||1e-9)));
+    }
+    bars=target.map(()=>0);anim=0;play();
+  }
+  function draw(){
+    const {ctx,w,h}=fit(cv);ctx.clearRect(0,0,w,h);
+    const pad=34,base=h-26,K=bars.length||18,gap=(w-2*pad)/K,bw=gap*0.66;
+    ctx.fillStyle=css('--muted');ctx.font='11px system-ui';ctx.textAlign='center';
+    ctx.fillText('recovery R² of input at delay k',w/2,16);
+    ctx.strokeStyle=css('--line');ctx.beginPath();ctx.moveTo(pad,base);ctx.lineTo(w-pad,base);ctx.stroke();
+    for(let k=0;k<K;k++){const v=bars[k];const bh=(h-70)*v;const x0=pad+k*gap+gap*0.17;
+      const g=Math.round(90+120*v);ctx.fillStyle=`rgb(${124-Math.round(v*60)},${108+Math.round(v*60)},${255-Math.round(v*40)})`;
+      ctx.fillRect(x0,base-bh,bw,bh);
+      ctx.fillStyle=css('--muted');ctx.fillText('k'+(k+1),x0+bw/2,base+14);}
+  }
+  function loop(){let done=true;for(let k=0;k<bars.length;k++){const d=target[k]-bars[k];
+    if(Math.abs(d)>0.005){bars[k]+=d*0.18;done=false;}else bars[k]=target[k];}
+    draw();if(!done)raf=requestAnimationFrame(loop);}
+  function play(){cancelAnimationFrame(raf);loop();}
+  document.getElementById('memRun').addEventListener('click',measure);
+  ['memRho','memLeak','memN'].forEach(id=>{const e=document.getElementById(id);
+    e.addEventListener('input',()=>{document.getElementById(id+'V').textContent=
+      (id==='memN')?e.value:(+e.value).toFixed(2);measure();});});
+  measure();
+})();
+
+window.addEventListener('resize',()=>{ /* canvases refit on next draw via fit() */ });
+</script>
+</body>
+</html>

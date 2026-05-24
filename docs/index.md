@@ -17,8 +17,13 @@ The core depends only on **NumPy** and **NetworkX**.
 pip install esnfed
 ```
 
-[:material-rocket-launch: Try it live in your browser](https://daibeal.github.io/esnfed/live/lab/index.html?path=quickstart.ipynb){ .md-button .md-button--primary }
-&nbsp; no install, runs entirely in your browser via JupyterLite + Pyodide.
+[:material-gamepad-variant: Open the interactive playground](playground.html){ .md-button .md-button--primary target=_blank }
+[:material-rocket-launch: Run it live (JupyterLite)](https://daibeal.github.io/esnfed/live/lab/index.html?path=quickstart.ipynb){ .md-button target=_blank }
+
+The **[playground](playground.html)** runs a real Echo State Network in your
+browser — drag sliders and watch reservoir activations move, race central vs
+federated vs local vs ensemble, and probe the network's memory. No install, no
+server.
 
 !!! tip "Why this and not [ReservoirPy](https://reservoirpy.readthedocs.io)?"
     ReservoirPy is the mature library for *building and tuning* reservoir models.

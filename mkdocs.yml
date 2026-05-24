@@ -96,6 +96,7 @@ extra:
 
 nav:
   - Home: index.md
+  - Playground: playground.html
   - Installation: install.md
   - Quickstart: quickstart.md
   - Concepts: concepts.md
