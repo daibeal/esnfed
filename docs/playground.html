@@ -356,7 +356,7 @@ function onResize(cv,fn){
     const pos=layoutNodes(kind,n,res.deg,w,h);
     // edges (faint, sub-sampled if very many)
     const E=res.edges, stp=E.length>1400?Math.ceil(E.length/1400):1;
-    ctx.strokeStyle=css('--line'); ctx.globalAlpha=0.45; ctx.lineWidth=1; ctx.beginPath();
+    ctx.strokeStyle=css('--muted'); ctx.globalAlpha=0.5; ctx.lineWidth=1.1; ctx.beginPath();
     for(let e=0;e<E.length;e+=stp){const a=pos[E[e][0]],b=pos[E[e][1]];
       ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]);}
     ctx.stroke(); ctx.globalAlpha=1;
