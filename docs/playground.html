@@ -60,10 +60,13 @@
   <!-- WIDGET 1: reservoir activations -->
   <section class="card">
     <h2>1 · Reservoir activations <span class="pill">how it reacts to input</span></h2>
-    <p class="desc">Each dot is a reservoir neuron; colour is its activation as the
-      input drives the network. Raise the spectral radius toward 1 for long-lived
-      "echoes"; push past 1 and the echo state property is lost (activations stop
-      fading). Pick an input and press play.</p>
+    <p class="desc">Each dot is a reservoir neuron and the lines are its
+      connections; colour is the activation as the input drives the network, and
+      node size grows with degree (so scale-free <b>hubs</b> stand out). Switch the
+      <b>structure</b> — ring, small-world, scale-free or random — to see how
+      connectivity changes the dynamics. Raise the spectral radius toward 1 for
+      long-lived "echoes"; push past 1 and the echo state property is lost
+      (activations stop fading). Pick an input and press play.</p>
     <div class="grid2">
       <canvas id="resCanvas" height="360"></canvas>
       <canvas id="traceCanvas" height="360"></canvas>
@@ -71,6 +74,13 @@
     <div class="controls">
       <button id="resPlay">▶ play</button>
       <button class="ghost" id="resReset">reset</button>
+      <label class="ctl">structure
+        <select id="resTopo">
+          <option value="ring">ring</option>
+          <option value="small_world" selected>small-world</option>
+          <option value="scale_free">scale-free</option>
+          <option value="random">random</option>
+        </select></label>
       <label class="ctl">input
         <select id="resInput">
           <option value="impulse">impulse</option>
@@ -168,6 +178,55 @@ function makeReservoir(N,density,rho,seed){
   return {W,Win,N};
 }
 
+// Topology-aware reservoir: returns the matrix plus the edge list and node
+// degrees so the structure can be drawn (ring, small-world, scale-free, random).
+function makeReservoirTopo(kind,N,rho,seed){
+  const rng=mulberry32(seed>>>0); const W=new Float64Array(N*N);
+  const edges=[]; const deg=new Array(N).fill(0);
+  const add=(i,j)=>{ if(i===j||i<0||j<0||i>=N||j>=N||W[i*N+j]!==0)return;
+    W[i*N+j]=2*rng()-1; edges.push([i,j]); deg[i]++; deg[j]++; };
+  if(kind==='ring'){
+    for(let i=0;i<N;i++)add(i,(i+1)%N);
+  }else if(kind==='random'){
+    const p=0.05; for(let i=0;i<N;i++)for(let j=0;j<N;j++)if(rng()<p)add(i,j);
+  }else if(kind==='scale_free'){
+    const m=2; const targets=[];
+    for(let i=0;i<=m&&i<N;i++){for(let j=0;j<i;j++){add(i,j);add(j,i);targets.push(i,j);}}
+    for(let i=m+1;i<N;i++){const chosen=new Set();let g=0;
+      while(chosen.size<m&&g++<2000){const t=targets.length?targets[Math.floor(rng()*targets.length)]:Math.floor(rng()*i);if(t!==i)chosen.add(t);}
+      chosen.forEach(t=>{add(i,t);add(t,i);targets.push(i,t);});}
+  }else{ // small_world: ring lattice (k each side) + random rewiring
+    const k=2,p=0.18;
+    for(let i=0;i<N;i++)for(let d=1;d<=k;d++)add(i,(i+d)%N);
+    for(let i=0;i<N;i++)for(let d=1;d<=k;d++)if(rng()<p)add(i,Math.floor(rng()*N));
+  }
+  // rescale to spectral radius (power iteration)
+  let v=new Float64Array(N);for(let i=0;i<N;i++)v[i]=randn(rng);
+  let nrm=Math.hypot(...v)||1;for(let i=0;i<N;i++)v[i]/=nrm;let sr=0;
+  for(let it=0;it<40;it++){const wv=new Float64Array(N);
+    for(let i=0;i<N;i++){let s=0;const row=i*N;for(let j=0;j<N;j++)s+=W[row+j]*v[j];wv[i]=s;}
+    nrm=Math.hypot(...wv);if(nrm===0)break;sr=nrm;for(let i=0;i<N;i++)v[i]=wv[i]/nrm;}
+  if(sr>0){const gn=rho/sr;for(let i=0;i<N*N;i++)W[i]*=gn;}
+  const Win=new Float64Array(N*2);for(let i=0;i<N;i++){Win[i*2]=2*rng()-1;Win[i*2+1]=2*rng()-1;}
+  return {W,Win,N,edges,deg};
+}
+// layout node positions per topology so structures look distinct
+function layoutNodes(kind,n,deg,w,h){
+  const cx=w/2,cy=h/2,R=Math.min(w,h)/2-26,pos=[];
+  if(kind==='scale_free'){
+    const order=[...Array(n).keys()].sort((a,b)=>deg[b]-deg[a]);const rank=new Array(n);
+    order.forEach((idx,r)=>rank[idx]=r);
+    for(let i=0;i<n;i++){const rr=R*Math.pow(rank[i]/Math.max(1,n-1),0.62);const ang=rank[i]*2.399963;
+      pos[i]=[cx+rr*Math.cos(ang),cy+rr*Math.sin(ang)];}
+  }else if(kind==='random'){
+    for(let i=0;i<n;i++){const ang=2*Math.PI*i/n;const jr=R*(0.6+0.36*(((i*2654435761)>>>0)%1000)/1000);
+      pos[i]=[cx+jr*Math.cos(ang),cy+jr*Math.sin(ang)];}
+  }else{ // ring, small_world
+    for(let i=0;i<n;i++){const ang=2*Math.PI*i/n;pos[i]=[cx+R*Math.cos(ang),cy+R*Math.sin(ang)];}
+  }
+  return pos;
+}
+
 // step the reservoir state in place; returns nothing
 function stepState(res,x,u,a,bias){
   const {W,Win,N}=res; const xn=new Float64Array(N);
@@ -256,8 +315,9 @@ function diverge(v){ // -1..1 -> color
 (function(){
   const cv=document.getElementById('resCanvas'), tc=document.getElementById('traceCanvas');
   if(!cv)return;
-  let res,x,t,playing=false,signal=[],trace=[],traceN=[[],[],[],[]],raf=null;
+  let res,x,t,playing=false,signal=[],trace=[],traceN=[[],[],[],[]],raf=null,seed=12345;
   const N=()=>+document.getElementById('resN').value;
+  const TOPO=()=>document.getElementById('resTopo').value;
   function genSignal(kind,T){const s=new Array(T);for(let i=0;i<T;i++){
     if(kind==='impulse')s[i]=(i===6)?1:0;
     else if(kind==='sine')s[i]=0.5*Math.sin(i*0.18);
@@ -265,26 +325,27 @@ function diverge(v){ // -1..1 -> color
     else s[i]=0.6*(Math.random()-0.5);} return s;}
   function rebuild(){
     const rho=+document.getElementById('resRho').value, n=N();
-    res=makeReservoir(n,0.15,rho,12345); x=new Float64Array(n); t=0;
+    res=makeReservoirTopo(TOPO(),n,rho,seed); x=new Float64Array(n); t=0;
     signal=genSignal(document.getElementById('resInput').value,100000);
     trace=[]; traceN=[[],[],[],[]];
   }
   function draw(){
     const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
-    const n=res.N, cx=w/2, cy=h/2, R=Math.min(w,h)/2-26;
-    // links faint
-    ctx.strokeStyle=css('--line'); ctx.globalAlpha=0.5;
-    // nodes on a ring (or grid for large N)
-    const pos=[];
-    for(let i=0;i<n;i++){const ang=2*Math.PI*i/n;pos.push([cx+R*Math.cos(ang),cy+R*Math.sin(ang)]);}
-    ctx.globalAlpha=1;
-    for(let i=0;i<n;i++){const a=x[i];const rad=4+Math.min(10,Math.abs(a)*12);
+    const n=res.N, kind=TOPO();
+    const pos=layoutNodes(kind,n,res.deg,w,h);
+    // edges (faint, sub-sampled if very many)
+    const E=res.edges, stp=E.length>1400?Math.ceil(E.length/1400):1;
+    ctx.strokeStyle=css('--line'); ctx.globalAlpha=0.45; ctx.lineWidth=1; ctx.beginPath();
+    for(let e=0;e<E.length;e+=stp){const a=pos[E[e][0]],b=pos[E[e][1]];
+      ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]);}
+    ctx.stroke(); ctx.globalAlpha=1;
+    // nodes: colour = activation, radius grows with degree
+    const maxd=Math.max(1,...res.deg);
+    for(let i=0;i<n;i++){const a=x[i];const rad=3+6*Math.sqrt(res.deg[i]/maxd)+Math.min(8,Math.abs(a)*10);
       ctx.beginPath();ctx.fillStyle=diverge(a);ctx.arc(pos[i][0],pos[i][1],rad,0,7);ctx.fill();}
-    // centre input marker
-    const u=signal[t]||0; ctx.fillStyle=css('--accent');
-    ctx.beginPath();ctx.arc(cx,cy,6+Math.abs(u)*16,0,7);ctx.fill();
+    const u=signal[t]||0;
     ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='center';
-    ctx.fillText('input '+u.toFixed(2)+'   ·   t='+t,cx,h-8);
+    ctx.fillText(kind.replace('_','-')+'   ·   input '+u.toFixed(2)+'   ·   t='+t,w/2,h-8);
   }
   function drawTrace(){
     const {ctx,w,h}=fit(tc);ctx.clearRect(0,0,w,h);
@@ -316,9 +377,10 @@ function diverge(v){ // -1..1 -> color
   bind('resLeak','resLeakV');
   bind('resN','resNV',()=>{rebuild();draw();drawTrace();});
   document.getElementById('resInput').addEventListener('change',()=>{rebuild();draw();drawTrace();});
+  document.getElementById('resTopo').addEventListener('change',()=>{rebuild();draw();drawTrace();});
   document.getElementById('resPlay').addEventListener('click',()=>play(!playing));
   document.getElementById('resReset').addEventListener('click',()=>{rebuild();draw();drawTrace();});
-  document.getElementById('resReroll').addEventListener('click',()=>{rebuild();draw();drawTrace();});
+  document.getElementById('resReroll').addEventListener('click',()=>{seed=(Math.random()*1e9)>>>0;rebuild();draw();drawTrace();});
   rebuild();draw();drawTrace();
 })();
 
