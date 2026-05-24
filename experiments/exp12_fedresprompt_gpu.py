@@ -39,17 +39,27 @@ TASKS = {
 }
 
 
+# Natural-language templates so the next token after the prompt is naturally the
+# label word (makes the restricted-label-token read-out meaningful).
+TASK_TEMPLATES = {
+    "sst2": "Review: {t}\nSentiment:",
+    "agnews": "News: {t}\nTopic:",
+}
+
+
 def load_task(task, tokenizer, n_train, n_test, seed):
     from datasets import load_dataset
     (ds_args, text_f, label_f, words) = TASKS[task]
     ds = load_dataset(*ds_args)
     split_test = "validation" if "validation" in ds else "test"
     rng = np.random.default_rng(seed)
+    tpl = TASK_TEMPLATES[task]
 
     def take(split, n):
         d = ds[split]
         idx = rng.choice(len(d), size=min(n, len(d)), replace=False)
-        return [(d[int(i)][text_f], int(d[int(i)][label_f])) for i in idx]
+        return [(tpl.format(t=str(d[int(i)][text_f]).strip()),
+                 int(d[int(i)][label_f])) for i in idx]
 
     train, test = take("train", n_train), take(split_test, n_test)
     # single-token label ids (first token of each class word)
@@ -271,7 +281,7 @@ def main():
     ap.add_argument("--task", default="sst2", choices=list(TASKS))
     ap.add_argument("--clients", type=int, default=4)
     ap.add_argument("--rounds", type=int, default=12)
-    ap.add_argument("--local-epochs", type=int, default=1)
+    ap.add_argument("--local-epochs", type=int, default=2)
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--n-train", type=int, default=512)
     ap.add_argument("--n-test", type=int, default=512)
@@ -279,7 +289,7 @@ def main():
     ap.add_argument("--prompt-tokens", type=int, default=4)
     ap.add_argument("--k", type=int, default=16)
     ap.add_argument("--lora-r", type=int, default=8)
-    ap.add_argument("--lr", type=float, default=5e-3)
+    ap.add_argument("--lr", type=float, default=3e-3)
     ap.add_argument("--max-len", type=int, default=64)
     ap.add_argument("--alpha", type=float, default=0.3)
     ap.add_argument("--seed", type=int, default=0)
