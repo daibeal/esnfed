@@ -112,18 +112,25 @@
   <!-- WIDGET 2: strategies -->
   <section class="card">
     <h2>2 · Central vs Federated vs Local vs Ensemble <span class="pill">the strategies</span></h2>
-    <p class="desc">A memory+nonlinearity task is split across clients. Watch the
-      predictions get traced out. <b>Federated</b> ridge pools the clients' summary
-      statistics and lands exactly on <b>centralized</b>. <b>Local-only</b> models
-      degrade as each client is starved of data. The <b>ensemble</b> averages
-      heterogeneous reservoirs and sits in between. Bars show test NRMSE (lower is
-      better).</p>
+    <p class="desc">A forecasting task — pick <b>synthetic</b>, the <b>real TED
+      spread</b> (a credit-risk series, 1986–2022) or chaotic <b>Mackey-Glass</b> —
+      split across clients. <b>Federated</b> ridge pools the clients' summary
+      statistics and lands exactly on <b>centralized</b>; <b>local-only</b> models
+      degrade as each client is starved of data; the <b>ensemble</b> of
+      heterogeneous reservoirs sits in between. Left: the animated test-set
+      forecast; right: test NRMSE (lower is better).</p>
     <div class="grid2">
       <canvas id="stratCanvas" height="340"></canvas>
       <canvas id="barCanvas" height="340"></canvas>
     </div>
     <div class="controls">
       <button id="stratPlay">▶ replay</button>
+      <label class="ctl">data
+        <select id="stratData">
+          <option value="memory">synthetic (memory)</option>
+          <option value="ted">TED spread (real)</option>
+          <option value="mackey">Mackey-Glass (chaos)</option>
+        </select></label>
       <label class="ctl">clients K = <b id="stratKV">6</b>
         <input type="range" id="stratK" min="1" max="10" step="1" value="6"></label>
       <label class="ctl">spectral radius ρ = <b id="stratRhoV">0.90</b>
@@ -366,6 +373,18 @@ function onResize(cv,fn){
   }
 }
 
+/* ---------- embedded datasets for the strategy comparison (real + simulated) ---------- */
+// TED spread (real; FRED series TEDRATE, 1986-2022), block-mean downsampled to 360 pts.
+const TED=[1.08,0.93,1.0,0.82,0.85,0.84,0.63,0.87,0.77,0.76,0.86,0.85,0.94,1.41,1.69,1.4,1.06,1.22,2.25,1.98,1.8,1.22,1.16,1.27,1.26,1.33,1.55,1.3,1.26,1.26,1.31,1.09,1.47,1.5,1.35,1.27,0.96,1.08,1.22,0.95,0.87,0.69,0.61,0.67,0.8,0.63,0.6,0.65,0.91,1.0,1.11,1.22,0.8,0.63,0.57,0.63,0.6,0.46,0.41,0.47,0.53,0.44,0.36,0.35,0.41,0.33,0.34,0.29,0.33,0.55,0.66,0.38,0.35,0.27,0.36,0.28,0.27,0.25,0.24,0.34,0.38,0.33,0.29,0.32,0.42,0.49,0.48,0.53,0.44,0.59,0.61,0.71,0.69,0.5,0.55,0.53,0.48,0.5,0.5,0.59,0.64,0.51,0.62,0.47,0.43,0.54,0.47,0.5,0.49,0.48,0.59,0.49,0.62,0.53,0.48,0.64,0.78,0.88,0.64,0.65,0.83,0.71,0.75,0.61,0.59,0.69,0.71,0.72,0.73,0.8,1.05,1.13,0.86,0.69,0.55,0.61,0.63,0.58,0.73,0.74,0.92,1.27,0.99,0.79,0.56,0.51,0.71,1.05,0.96,0.65,0.64,0.67,0.6,0.72,0.5,0.49,0.73,0.47,0.32,0.23,0.28,0.26,0.23,0.22,0.17,0.18,0.26,0.18,0.18,0.16,0.16,0.19,0.23,0.21,0.2,0.17,0.15,0.21,0.2,0.21,0.19,0.22,0.24,0.26,0.25,0.2,0.18,0.21,0.22,0.3,0.26,0.26,0.3,0.24,0.35,0.29,0.3,0.38,0.44,0.45,0.35,0.46,0.48,0.48,0.55,0.33,0.37,0.47,0.48,0.6,0.51,0.51,0.52,0.42,0.5,0.37,0.35,0.45,0.6,0.74,0.55,1.44,1.46,1.34,2.05,1.22,1.05,1.47,1.34,0.85,1.14,1.09,2.2,3.08,2.08,1.27,0.96,1.05,0.92,0.54,0.38,0.28,0.19,0.2,0.21,0.2,0.16,0.12,0.15,0.31,0.41,0.31,0.16,0.15,0.15,0.16,0.15,0.2,0.22,0.22,0.21,0.21,0.3,0.36,0.43,0.54,0.52,0.4,0.38,0.38,0.38,0.36,0.33,0.27,0.21,0.23,0.23,0.19,0.2,0.23,0.22,0.23,0.22,0.23,0.19,0.17,0.19,0.19,0.18,0.2,0.19,0.2,0.2,0.21,0.21,0.21,0.22,0.24,0.24,0.25,0.26,0.27,0.25,0.28,0.32,0.26,0.31,0.34,0.32,0.38,0.38,0.38,0.41,0.52,0.57,0.51,0.46,0.51,0.5,0.39,0.33,0.27,0.26,0.29,0.3,0.27,0.22,0.31,0.31,0.47,0.58,0.44,0.42,0.34,0.23,0.22,0.33,0.42,0.36,0.21,0.21,0.18,0.21,0.21,0.21,0.31,0.35,0.37,0.25,0.29,1.16,0.38,0.15,0.14,0.14,0.13,0.12,0.14,0.14,0.15];
+function mackeyGlass(T){const tau=17,n=T+tau+120,x=new Array(n).fill(1.2);
+  for(let i=tau;i<n-1;i++){const xt=x[i-tau];x[i+1]=x[i]+(0.2*xt/(1+Math.pow(xt,10))-0.1*x[i]);}
+  return x.slice(120,120+T);}
+function forecastTask(series){ // one-step-ahead forecast of a 1-D series (z-scored)
+  const m=series.reduce((s,v)=>s+v,0)/series.length;
+  const sd=Math.sqrt(series.reduce((s,v)=>s+(v-m)*(v-m),0)/series.length)||1;
+  const z=series.map(v=>(v-m)/sd),T=z.length-1,u=new Array(T),y=new Array(T);
+  for(let i=0;i<T;i++){u[i]=z[i];y[i]=z[i+1];}return {u,y,T};}
+
 /* =================== WIDGET 1 =================== */
 (function(){
   const cv=document.getElementById('resCanvas'), tc=document.getElementById('traceCanvas');
@@ -455,7 +474,12 @@ function onResize(cv,fn){
   const cv=document.getElementById('stratCanvas'), bc=document.getElementById('barCanvas');
   if(!cv)return;
   let result=null, anim=0, raf=null;
-  function task(seed){ // memory + nonlinearity, stable
+  const DATA=()=>document.getElementById('stratData').value;
+  function task(seed){
+    const d=DATA();
+    if(d==='ted')return forecastTask(TED);              // real credit-risk series
+    if(d==='mackey')return forecastTask(mackeyGlass(560)); // chaotic simulation
+    // synthetic memory + nonlinearity (default)
     const rng=mulberry32(seed), T=520, u=new Array(T), y=new Array(T);
     for(let i=0;i<T;i++)u[i]=rng()*0.5;
     for(let i=0;i<T;i++){const a=i>=2?u[i-2]:0,b=i>=5?u[i-5]:0,c=i>=1?u[i-1]:0;
@@ -493,12 +517,13 @@ function onResize(cv,fn){
   function draw(){
     const {ctx,w,h}=fit(cv);ctx.clearRect(0,0,w,h); if(!result)return;
     const {y,T,split,pc,pf,pl,pe}=result; const pad=28;
-    let lo=Infinity,hi=-Infinity;
-    for(let t=split;t<T;t++){for(const v of [y[t],pc[t],pl[t],pe[t]]){if(v<lo)lo=v;if(v>hi)hi=v;}}
+    let lo=Infinity,hi=-Infinity;   // frame the TRUE series; off-scale (broken) forecasts clip
+    for(let t=split;t<T;t++){if(y[t]<lo)lo=y[t];if(y[t]>hi)hi=y[t];}
+    const mg=(hi-lo)*0.35||1; lo-=mg; hi+=mg;
     const X=t=>pad+(w-pad-6)*(t-split)/(T-split-1);
     const Y=v=>h-pad-(h-2*pad)*(v-lo)/((hi-lo)||1);
     ctx.fillStyle=css('--muted');ctx.font='11px system-ui';ctx.textAlign='left';
-    ctx.fillText('test-set predictions (animated)',pad,16);
+    ctx.fillText('test-set forecast — '+({memory:'synthetic',ted:'TED spread (real)',mackey:'Mackey-Glass'}[DATA()]||DATA()),pad,16);
     const curve=(p,color,wd,dash)=>{ctx.strokeStyle=color;ctx.lineWidth=wd;ctx.setLineDash(dash||[]);
       ctx.beginPath();for(let t=split;t<=anim&&t<T;t++){const xx=X(t),yy=Y(p[t]);
         t===split?ctx.moveTo(xx,yy):ctx.lineTo(xx,yy);}ctx.stroke();ctx.setLineDash([]);};
@@ -526,6 +551,7 @@ function onResize(cv,fn){
   function play(){cancelAnimationFrame(raf);loop();}
   document.getElementById('stratPlay').addEventListener('click',run);
   document.getElementById('stratReroll').addEventListener('click',run);
+  document.getElementById('stratData').addEventListener('change',run);
   const sk=document.getElementById('stratK'),sr=document.getElementById('stratRho');
   sk.addEventListener('input',()=>{document.getElementById('stratKV').textContent=sk.value;run();});
   sr.addEventListener('input',()=>{document.getElementById('stratRhoV').textContent=(+sr.value).toFixed(2);run();});
