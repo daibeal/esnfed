@@ -35,16 +35,22 @@ def _as_rng(rng) -> np.random.Generator:
     return rng if isinstance(rng, np.random.Generator) else np.random.default_rng(rng)
 
 
-def gaussian_sigma(epsilon: float, delta: float, sensitivity: float) -> float:
+def _std_normal_cdf(t: float) -> float:
+    return 0.5 * (1.0 + math.erf(t / math.sqrt(2.0)))
+
+
+def gaussian_sigma(epsilon: float, delta: float, sensitivity: float,
+                   *, method: str = "analytic") -> float:
     """Noise std dev for the Gaussian mechanism under :math:`(\\varepsilon,\\delta)`-DP.
 
-    Uses the classic analytic bound (Dwork & Roth, 2014, Appendix A):
+    ``method="analytic"`` (default) uses the **analytic Gaussian mechanism**
+    (Balle & Wang, 2018): the smallest ``sigma`` for which the mechanism is
+    :math:`(\\varepsilon, \\delta)`-DP, found by a short bisection. It is valid for
+    *any* ``epsilon > 0`` and is never looser than the classic bound.
 
-    .. math:: \\sigma = \\Delta_2 \\, \\sqrt{2\\ln(1.25/\\delta)} \\,/\\, \\varepsilon,
-
-    which guarantees :math:`(\\varepsilon, \\delta)`-DP for ``epsilon`` in ``(0, 1]``.
-    For ``epsilon > 1`` the bound is heuristic and a warning is issued (use a
-    tighter/analytic Gaussian mechanism if a guarantee is required there).
+    ``method="classic"`` uses the textbook bound (Dwork & Roth, 2014, App. A),
+    :math:`\\sigma = \\Delta_2 \\sqrt{2\\ln(1.25/\\delta)} / \\varepsilon`, which is only
+    valid for ``epsilon <= 1`` (a warning is issued above that).
     """
     if not (0.0 < delta < 1.0):
         raise ValueError("delta must be in (0, 1)")
@@ -52,13 +58,38 @@ def gaussian_sigma(epsilon: float, delta: float, sensitivity: float) -> float:
         raise ValueError("epsilon must be > 0")
     if sensitivity < 0.0:
         raise ValueError("sensitivity must be >= 0")
-    if epsilon > 1.0:
-        warnings.warn(
-            "the classic Gaussian-mechanism bound assumes epsilon <= 1; the "
-            "(epsilon, delta) guarantee is not ensured for larger epsilon",
-            stacklevel=2,
-        )
-    return sensitivity * math.sqrt(2.0 * math.log(1.25 / delta)) / epsilon
+    if sensitivity == 0.0:
+        return 0.0
+
+    if method == "classic":
+        if epsilon > 1.0:
+            warnings.warn(
+                "the classic Gaussian-mechanism bound assumes epsilon <= 1; use "
+                "method='analytic' for a guarantee at larger epsilon",
+                stacklevel=2,
+            )
+        return sensitivity * math.sqrt(2.0 * math.log(1.25 / delta)) / epsilon
+
+    if method != "analytic":
+        raise ValueError("method must be 'analytic' or 'classic'")
+
+    # Analytic Gaussian mechanism. With the scale-free ratio s = sigma/Delta, the
+    # mechanism is (epsilon, delta)-DP iff B(s) <= delta, where B is decreasing:
+    #   B(s) = Phi(1/(2s) - eps*s) - e^eps * Phi(-1/(2s) - eps*s).
+    def B(s: float) -> float:
+        return (_std_normal_cdf(1.0 / (2.0 * s) - epsilon * s)
+                - math.exp(epsilon) * _std_normal_cdf(-1.0 / (2.0 * s) - epsilon * s))
+
+    lo, hi = 1e-9, 1.0
+    while B(hi) > delta:
+        hi *= 2.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if B(mid) > delta:
+            lo = mid
+        else:
+            hi = mid
+    return sensitivity * hi
 
 
 def clip_rows(M: np.ndarray, max_norm: float) -> np.ndarray:

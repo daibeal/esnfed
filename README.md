@@ -28,7 +28,8 @@ All four plots below are produced by `esnfed.viz` (see *Visualising your ESN*).
 ## Features
 
 - **Echo State Network** with leaky-integrator neurons and a closed-form ridge
-  readout (`EchoStateNetwork`).
+  readout (`EchoStateNetwork`); a **deep / hierarchical** stack
+  (`DeepEchoStateNetwork`); heterogeneous leaking rates and mixed activations.
 - **Federated strategies**:
   - `federated_ridge` — *exact* federated training for a shared reservoir
     (clients exchange only ridge sufficient statistics; provably equal to pooled
@@ -36,10 +37,20 @@ All four plots below are produced by `esnfed.viz` (see *Visualising your ESN*).
   - `fedavg` — iterative FedAvg on the readout;
   - `ensemble_predict` — prediction ensemble for *heterogeneous* reservoirs;
   - `structural_alignment` — interpolate reservoirs toward a shared structure.
+- **Privacy & continual learning** — all on the same sufficient statistics:
+  - `federated_ridge_dp` — `(ε, δ)`-**differential privacy** (analytic Gaussian
+    mechanism);
+  - `federated_ridge_secure` — **secure aggregation** (additive masking; the
+    server only sees the sum);
+  - `StreamingRidge` / `RLSReadout` — **incremental / online** ridge for
+    streaming and continual federated learning.
+- **Sequence classification** (`classification`) with the same *exact* federated
+  aggregation (e.g. speaker ID, activity recognition).
 - **Reservoir topologies**: Erdős–Rényi, small-world, scale-free, ring.
-- **Data**: synthetic benchmarks (NARMA-10, Mackey-Glass, Lorenz) **and** real
-  data — a bundled counterparty-risk series (the TED spread) plus generic
-  loaders (`from_array`, `load_csv`, `load_fred`).
+- **Data**: synthetic benchmarks (NARMA-10, Mackey-Glass, Lorenz); real series — a
+  bundled counterparty-risk series (the TED spread) and FRED loaders (`load_fred`,
+  multivariate `load_fred_matrix`); and UCI sequence-classification benchmarks
+  (`load_japanese_vowels`, `load_har`).
 - **Interoperability**: adapters for [ReservoirPy](https://reservoirpy.readthedocs.io)
   reservoirs and an example integration with the
   [Flower](https://flower.ai) federated-learning framework.
@@ -95,6 +106,23 @@ esn = EchoStateNetwork(1, 1, W, spectral_radius=0.9, washout=100).fit(u_tr, y_tr
 print("NRMSE:", metrics.nrmse(y_te[100:], esn.predict(u_te)[100:]))
 ```
 
+### Differential privacy & secure aggregation
+
+Harden the federated exchange — the same `(A, B)` statistics, now with a formal
+privacy guarantee, or hidden from the server:
+
+```python
+from esnfed import federated
+from esnfed.privacy import PrivacyConfig
+
+# (ε, δ)-differentially private readout (clip + analytic Gaussian mechanism)
+cfg = PrivacyConfig(epsilon=1.0, delta=1e-5, clip_state=5.0, clip_target=1.0)
+W_dp = federated.federated_ridge_dp(clients, ref, cfg)
+
+# secure aggregation: the server only ever sees the masked sum of clients
+W_secure = federated.federated_ridge_secure(clients, ref, seed=0)
+```
+
 ## Interoperability
 
 ### ReservoirPy — design there, federate here
@@ -147,18 +175,23 @@ viz.save(viz.plot_spectrum(esn), "spectrum.html")   # or .png (needs kaleido)
 | Module | Contents |
 |--------|----------|
 | `esnfed.esn` | `EchoStateNetwork`, ridge helpers |
+| `esnfed.deep` | `DeepEchoStateNetwork` (stacked reservoirs) |
 | `esnfed.topologies` | reservoir generators + `graph_metrics` |
-| `esnfed.datasets` | NARMA-10, Mackey-Glass, Lorenz; `from_array`, `load_csv`, `load_ted_spread`, `load_fred` |
+| `esnfed.datasets` | NARMA-10, Mackey-Glass, Lorenz; `from_array`, `load_csv`, `load_ted_spread`, `load_fred`, `load_fred_matrix`, `load_japanese_vowels`, `load_har` |
 | `esnfed.metrics` | `nrmse`, `rmse`, `mse`, `r2_score` |
-| `esnfed.federated` | `Client`, `federated_ridge`, `fedavg`, `ensemble_predict`, `structural_alignment` |
+| `esnfed.federated` | `Client`, `federated_ridge`, `fedavg`, `ensemble_predict`, `structural_alignment`, `federated_ridge_dp`, `federated_ridge_secure` |
+| `esnfed.privacy` | differential privacy (`dp_statistics`, `gaussian_sigma`) + secure aggregation (`secure_sum`) |
+| `esnfed.streaming` | `StreamingRidge`, `RLSReadout` (incremental / online ridge) |
+| `esnfed.classification` | sequence classification + exact federated / ensemble variants |
 | `esnfed.interop` | ReservoirPy adapters (`to_esn`, `reservoir_matrix`) |
 | `esnfed.viz` | `plot_reservoir`, `plot_spectrum`, `plot_states`, `plot_forecast` |
+| `esnfed.llm_orchestration` | experimental FedResPrompt (reservoir soft-prompt control of a frozen LLM) |
 
 ## Reproducing the research experiments
 
 ```bash
 pip install -e ".[experiments,reservoirpy,flower,viz]"
-python -m pytest                    # 53 tests
+python -m pytest                    # 92 tests
 python experiments/run_all.py       # synthetic-benchmark figures and tables
 python experiments/exp6_finance.py  # federated counterparty-risk (TED spread)
 ```

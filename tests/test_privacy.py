@@ -30,12 +30,30 @@ def setup():
 def test_gaussian_sigma_scaling():
     s = gaussian_sigma(0.5, 1e-5, 1.0)
     assert s > 0
-    assert gaussian_sigma(0.25, 1e-5, 1.0) == pytest.approx(2 * s)  # ~1/epsilon
-    assert gaussian_sigma(0.5, 1e-5, 2.0) == pytest.approx(2 * s)   # ~sensitivity
+    assert gaussian_sigma(0.5, 1e-5, 2.0) == pytest.approx(2 * s)   # linear in sensitivity
+    assert gaussian_sigma(0.25, 1e-5, 1.0) > gaussian_sigma(1.0, 1e-5, 1.0)  # decreasing in eps
+    # the analytic mechanism is never looser than the classic bound (for eps <= 1)
+    assert gaussian_sigma(0.5, 1e-5, 1.0, method="analytic") <= \
+        gaussian_sigma(0.5, 1e-5, 1.0, method="classic") + 1e-9
+    # the classic bound is exactly inverse-linear in epsilon
+    assert gaussian_sigma(0.25, 1e-5, 1.0, method="classic") == \
+        pytest.approx(2 * gaussian_sigma(0.5, 1e-5, 1.0, method="classic"))
     with pytest.raises(ValueError):
         gaussian_sigma(0.5, 1.0, 1.0)    # delta must be in (0,1)
     with pytest.raises(ValueError):
         gaussian_sigma(0.0, 1e-5, 1.0)   # epsilon must be > 0
+
+
+def test_analytic_gaussian_satisfies_dp_condition():
+    """At eps > 1 (where the classic bound is invalid) the analytic sigma must
+    still satisfy the (eps, delta)-DP guarantee B(sigma) <= delta."""
+    import math
+    eps, delta, sens = 2.0, 1e-5, 3.0
+    sigma = gaussian_sigma(eps, delta, sens)  # analytic
+    Phi = lambda t: 0.5 * (1.0 + math.erf(t / math.sqrt(2.0)))
+    s = sigma / sens
+    B = Phi(1.0 / (2 * s) - eps * s) - math.exp(eps) * Phi(-1.0 / (2 * s) - eps * s)
+    assert B <= delta + 1e-9
 
 
 def test_clip_rows_bounds_norm():

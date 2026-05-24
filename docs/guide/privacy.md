@@ -46,9 +46,11 @@ classic bound `σ = sensitivity·√(2 ln(1.25/δ)) / ε`.
     the clips near the typical record norm so most records are not clipped.
 
 !!! note
-    The classic bound assumes `ε ≤ 1`; a warning is raised above that. The noise
-    is zero-mean, so averaging many private releases converges to the (clipped)
-    exact statistics.
+    `gaussian_sigma` uses the **analytic Gaussian mechanism** (Balle & Wang, 2018)
+    by default — valid for any `ε > 0` and never looser than the classic bound;
+    pass `method="classic"` for the textbook `ε ≤ 1` formula. The noise is
+    zero-mean, so averaging many private releases converges to the (clipped) exact
+    statistics.
 
 ## Secure aggregation
 
