@@ -333,8 +333,7 @@ function onResize(cv,fn){
 (function(){
   const cv=document.getElementById('resCanvas'), tc=document.getElementById('traceCanvas');
   if(!cv)return;
-  const DEBUG=true;   // diagnostics: edges drawn in red + console logs + on-canvas badge
-  let res,x,x2,t,playing=false,signal=[],echo=[],raf=null,seed=12345,__dbgLeft=6;
+  let res,x,x2,t,playing=false,signal=[],echo=[],raf=null,seed=12345;
   const N=()=>+document.getElementById('resN').value;
   const TOPO=()=>document.getElementById('resTopo').value;
   function genSignal(kind,T){const s=new Array(T);for(let i=0;i<T;i++){
@@ -349,7 +348,7 @@ function onResize(cv,fn){
     x2=new Float64Array(n); const g=mulberry32((seed^0x9e3779b9)>>>0);
     for(let i=0;i<n;i++)x2[i]=2*g()-1;
     signal=genSignal(document.getElementById('resInput').value,100000);
-    echo=[]; __dbgLeft=6;
+    echo=[];
   }
   function draw(){
     const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
@@ -357,26 +356,14 @@ function onResize(cv,fn){
     const pos=layoutNodes(kind,n,res.deg,w,h);
     // edges (faint, sub-sampled if very many)
     const E=res.edges, stp=E.length>1400?Math.ceil(E.length/1400):1;
-    ctx.strokeStyle=DEBUG?'#ff3b30':css('--muted'); ctx.globalAlpha=DEBUG?0.95:0.5;
-    ctx.lineWidth=DEBUG?1.4:1.1; ctx.beginPath();
-    let __seg=0, __bad=0;
+    ctx.strokeStyle=css('--accent'); ctx.globalAlpha=0.35; ctx.lineWidth=1.1; ctx.beginPath();
     for(let e=0;e<E.length;e+=stp){const a=pos[E[e][0]],b=pos[E[e][1]];
-      if(!a||!b||!isFinite(a[0])||!isFinite(a[1])||!isFinite(b[0])||!isFinite(b[1])){__bad++;continue;}
-      ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); __seg++;}
+      ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]);}
     ctx.stroke(); ctx.globalAlpha=1;
-    if(DEBUG&&__dbgLeft>0){__dbgLeft--;
-      console.log('[playground W1]', {topo:kind, N:n, edges:E.length, step:stp,
-        segmentsDrawn:__seg, badCoords:__bad,
-        canvas:{w:Math.round(w), h:Math.round(h), clientW:cv.clientWidth, dpr:window.devicePixelRatio||1},
-        strokeResolved:ctx.strokeStyle,
-        cssMuted:JSON.stringify(css('--muted')), cssLine:JSON.stringify(css('--line')),
-        firstEdge:E.length?{idx:E[0], a:pos[E[0][0]], b:pos[E[0][1]]}:'NONE'});}
     // nodes: colour = activation, radius grows with degree
     const maxd=Math.max(1,...res.deg);
     for(let i=0;i<n;i++){const a=x[i];const rad=3+6*Math.sqrt(res.deg[i]/maxd)+Math.min(8,Math.abs(a)*10);
       ctx.beginPath();ctx.fillStyle=diverge(a);ctx.arc(pos[i][0],pos[i][1],rad,0,7);ctx.fill();}
-    if(DEBUG){ctx.globalAlpha=1;ctx.fillStyle='#ffd60a';ctx.font='11px monospace';ctx.textAlign='left';
-      ctx.fillText('DEBUG edges='+E.length+' drawn='+__seg+' bad='+__bad+' cssMuted='+(css('--muted')||'EMPTY'),6,14);}
     const u=signal[t]||0;
     ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='center';
     ctx.fillText(kind.replace('_','-')+'   ·   input '+u.toFixed(2)+'   ·   t='+t,w/2,h-8);
