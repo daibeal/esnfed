@@ -374,7 +374,9 @@ function onResize(cv,fn){
     ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='left';
     ctx.fillText('echo state test — two runs, different starts, same input',pad-10,18);
     ctx.fillText('distance → 0  ⇒  the initial state is forgotten (ESP holds)',pad-10,34);
-    ctx.strokeStyle=css('--line');ctx.beginPath();ctx.moveTo(pad,base);ctx.lineTo(w-6,base);ctx.stroke();
+    ctx.strokeStyle=css('--muted');ctx.globalAlpha=0.5;ctx.beginPath();ctx.moveTo(pad,base);ctx.lineTo(w-6,base);ctx.stroke();ctx.globalAlpha=1;
+    if(!echo.length){ctx.fillStyle=css('--muted');ctx.textAlign='center';ctx.font='12px system-ui';
+      ctx.fillText('press ▶ play to run the echo-state test',(pad+w-6)/2,(top+base)/2);}
     const maxd=Math.max(0.6,...echo);
     ctx.strokeStyle=css('--accent');ctx.lineWidth=2.4;ctx.beginPath();
     for(let i=0;i<echo.length;i++){const xx=pad+(w-pad-6)*i/M;
@@ -407,7 +409,7 @@ function onResize(cv,fn){
   document.getElementById('resReset').addEventListener('click',()=>{rebuild();draw();drawTrace();});
   document.getElementById('resReroll').addEventListener('click',()=>{seed=(Math.random()*1e9)>>>0;rebuild();draw();drawTrace();});
   function redraw(){ if(res){ draw(); drawTrace(); } }
-  rebuild(); onResize(cv,redraw); redraw();
+  rebuild(); onResize(cv,redraw); if(tc)onResize(tc,redraw); redraw();
 })();
 
 /* =================== WIDGET 2 =================== */
