@@ -100,6 +100,12 @@ def test_federated_ridge_dp_runs_and_differs_from_exact(setup):
     assert W_dp.shape == W_exact.shape
     assert np.all(np.isfinite(W_dp))
     assert not np.allclose(W_dp, W_exact)  # privacy noise perturbs the readout
+    # the noise-aware ridge keeps the DP readout usable -- it must not explode
+    # through the ill-conditioned solve (regression: was NRMSE >> 1 without it)
+    from esnfed import datasets, metrics
+    u_te, y_te = datasets.narma10(400, rng=np.random.default_rng(123))
+    Z_te = ref.harvest(u_te)[ref.washout:]
+    assert metrics.nrmse(y_te[ref.washout:], Z_te @ W_dp) < 3.0
 
 
 # ----------------------------------------------------------- secure aggregation

@@ -35,7 +35,7 @@ import numpy as np
 
 from .esn import EchoStateNetwork, ridge_statistics, solve_readout
 from .metrics import nrmse
-from .privacy import PrivacyConfig, dp_statistics, secure_sum
+from .privacy import PrivacyConfig, dp_statistics, gaussian_sigma, secure_sum
 
 
 @dataclass
@@ -114,7 +114,9 @@ def federated_ridge_dp(
     solved once. The readout is then :math:`(\\varepsilon, \\delta)`-DP w.r.t. every
     client's records. Independent noise is drawn per client from ``cfg.seed``.
     Unlike :func:`federated_ridge` this is *not* exact -- the clipping and noise
-    are the price of the formal privacy guarantee.
+    are the price of the formal privacy guarantee. The noisy, ill-conditioned Gram
+    is solved with a ridge augmented by the spectral scale of the injected noise,
+    so the readout stays well-posed at any budget.
     """
     A = np.zeros((esn.readout_dim, esn.readout_dim))
     B = np.zeros((esn.readout_dim, esn.n_outputs))
@@ -124,7 +126,11 @@ def federated_ridge_dp(
         Ak, Bk = dp_statistics(c.states(), c.targets(), cfg, rng=child)
         A += Ak
         B += Bk
-    return solve_readout(A, B, esn.ridge)
+    # Summed Gaussian noise has spectral scale ~ 2*sigma*sqrt(K*D) (semicircle law);
+    # regularise by that much, else the readout explodes at small epsilon.
+    sigma = gaussian_sigma(cfg.epsilon, cfg.delta, cfg.sensitivity())
+    dp_ridge = esn.ridge + 2.0 * sigma * np.sqrt(len(clients) * esn.readout_dim)
+    return solve_readout(A, B, dp_ridge)
 
 
 def federated_ridge_secure(

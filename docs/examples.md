@@ -42,6 +42,73 @@ In the [`examples/`](https://github.com/daibeal/esnfed/tree/main/examples) folde
 - **`plotly_gallery.py`** — regenerates the interactive plots above.
 - **`flower_federated_ridge.py`** — the [Flower](guide/interop.md) integration.
 - **`make_animations.py`** — regenerates the GIFs above.
+- **`privacy_demo.py`** — differential privacy + secure aggregation of the federated statistics.
+- **`streaming_demo.py`** — incremental / streaming ridge and the RLS online readout.
+- **`classification_demo.py`** — federated sequence classification (self-contained toy).
+
+## Recipes — the newer capabilities
+
+See the [Privacy & streaming](guide/privacy.md) and
+[Sequence classification](guide/classification.md) guides for the full story.
+
+=== "Differential privacy"
+
+    ```python
+    from esnfed import federated
+    from esnfed.privacy import PrivacyConfig
+
+    cfg = PrivacyConfig(epsilon=1.0, delta=1e-5, clip_state=5.0, clip_target=1.0)
+    W_dp = federated.federated_ridge_dp(clients, ref, cfg)   # (eps, delta)-DP readout
+    ```
+
+=== "Secure aggregation"
+
+    ```python
+    # the server only ever sees the masked sum of (A_k, B_k); result == exact ridge
+    W = federated.federated_ridge_secure(clients, ref, seed=0)
+    ```
+
+=== "Streaming / continual"
+
+    ```python
+    from esnfed.streaming import StreamingRidge
+
+    acc = StreamingRidge(ref.readout_dim, ref.n_outputs, ridge=1e-6)
+    for Z_chunk, Y_chunk in stream:        # accumulate as new data arrives
+        acc.update(Z_chunk, Y_chunk)
+    W = acc.readout()                      # exact ridge over everything seen
+    acc.merge(other_client_acc)            # merging == the federated sum
+    ```
+
+=== "Online (RLS)"
+
+    ```python
+    from esnfed.streaming import RLSReadout
+
+    rls = RLSReadout(ref.readout_dim, ref.n_outputs, ridge=1e-6)
+    for z, y in samples:                   # per-sample Sherman-Morrison updates
+        rls.update(z, y)
+    W = rls.readout()
+    ```
+
+=== "Sequence classification"
+
+    ```python
+    from esnfed.classification import federated_classifier, predict_labels, accuracy
+
+    # client_data: list of (sequences, labels) -- one client per speaker / subject
+    W_out = federated_classifier(esn, client_data, n_classes)   # exact = centralized
+    acc = accuracy(y_test, predict_labels(esn, X_test, W_out))
+    ```
+
+=== "Multivariate forecasting"
+
+    ```python
+    from esnfed import datasets
+
+    # align several FRED series into one multivariate forecasting task
+    u, y = datasets.load_fred_matrix(["TEDRATE", "VIXCLS", "DGS10", "DFF"])
+    ```
 
 ## Reproduce the research experiments
 

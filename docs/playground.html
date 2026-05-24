@@ -314,6 +314,21 @@ function diverge(v){ // -1..1 -> color
   if(v>=0)return `rgb(${Math.round(60+v*195)},${Math.round(110-v*60)},${Math.round(110-v*70)})`;
   return `rgb(${Math.round(60+(-v)*20)},${Math.round(110+(-v)*80)},${Math.round(110+(-v)*120)})`;}
 
+/* ---------- redraw registry ----------
+   Each widget registers a function that repaints its cached state at the current
+   canvas size. A ResizeObserver repaints when the canvas first gets a real size
+   (so the first paint is never lost if it ran before layout) and on every resize;
+   the window 'resize' listener is a fallback. This fixes canvases that came up
+   blank because they were drawn before the browser had laid them out. */
+const __redraws=[];
+function onResize(cv,fn){
+  __redraws.push(fn);
+  if(typeof ResizeObserver!=='undefined'){
+    const ro=new ResizeObserver(()=>requestAnimationFrame(()=>{try{fn();}catch(e){}}));
+    ro.observe(cv);
+  }
+}
+
 /* =================== WIDGET 1 =================== */
 (function(){
   const cv=document.getElementById('resCanvas'), tc=document.getElementById('traceCanvas');
@@ -391,7 +406,8 @@ function diverge(v){ // -1..1 -> color
   document.getElementById('resPlay').addEventListener('click',()=>play(!playing));
   document.getElementById('resReset').addEventListener('click',()=>{rebuild();draw();drawTrace();});
   document.getElementById('resReroll').addEventListener('click',()=>{seed=(Math.random()*1e9)>>>0;rebuild();draw();drawTrace();});
-  rebuild();draw();drawTrace();
+  function redraw(){ if(res){ draw(); drawTrace(); } }
+  rebuild(); onResize(cv,redraw); redraw();
 })();
 
 /* =================== WIDGET 2 =================== */
@@ -473,7 +489,8 @@ function diverge(v){ // -1..1 -> color
   const sk=document.getElementById('stratK'),sr=document.getElementById('stratRho');
   sk.addEventListener('input',()=>{document.getElementById('stratKV').textContent=sk.value;run();});
   sr.addEventListener('input',()=>{document.getElementById('stratRhoV').textContent=(+sr.value).toFixed(2);run();});
-  run();
+  function redraw(){ if(result){ draw(); drawBars(); } }
+  onResize(cv,redraw); run();
 })();
 
 /* =================== WIDGET 3 =================== */
@@ -516,10 +533,11 @@ function diverge(v){ // -1..1 -> color
   ['memRho','memLeak','memN'].forEach(id=>{const e=document.getElementById(id);
     e.addEventListener('input',()=>{document.getElementById(id+'V').textContent=
       (id==='memN')?e.value:(+e.value).toFixed(2);measure();});});
-  measure();
+  function redraw(){ if(bars.length){ draw(); } }
+  onResize(cv,redraw); measure();
 })();
 
-window.addEventListener('resize',()=>{ /* canvases refit on next draw via fit() */ });
+window.addEventListener('resize',()=>{ __redraws.forEach(f=>{try{f();}catch(e){}}); });
 </script>
 </body>
 </html>
