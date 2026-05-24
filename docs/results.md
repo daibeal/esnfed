@@ -1,5 +1,9 @@
 # Results database
 
+[:material-database-search: Query it live in your browser](https://daibeal.github.io/esnfed/live/lab/index.html?path=results_explore.ipynb){ .md-button .md-button--primary target=_blank }
+
+The database is **bundled into the [live environment](https://daibeal.github.io/esnfed/live/lab/index.html?path=results_explore.ipynb)** — open the notebook above and run real SQL against it in your browser (Pyodide ships `sqlite3`; no install, no server). The cell-by-cell explorer is fully editable.
+
 Every metric reported in the thesis is consolidated into a single database, built
 from the raw experiment outputs by
 [`experiments/build_results_db.py`](https://github.com/daibeal/esnfed/blob/main/experiments/build_results_db.py)

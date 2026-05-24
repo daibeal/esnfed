@@ -29,6 +29,8 @@ jobs:
           pip install -e ".[docs]"
       - name: Build site
         run: python -m mkdocs build --strict
+      - name: Bundle the results database into the live environment
+        run: cp results/esnfed_results.db results/esnfed_metrics_long.csv jupyterlite/contents/
       - name: Build in-browser live environment (JupyterLite)
         run: jupyter lite build --contents jupyterlite/contents --output-dir site/live
       - uses: actions/upload-pages-artifact@v3

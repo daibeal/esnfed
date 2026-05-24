@@ -27,3 +27,7 @@ Thumbs.db
 _output/
 _litetest/
 .jupyterlite.doit.db
+
+# DB copies bundled into the live env at build time (source of truth: results/)
+jupyterlite/contents/esnfed_results.db
+jupyterlite/contents/esnfed_metrics_long.csv
