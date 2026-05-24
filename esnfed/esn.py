@@ -42,6 +42,20 @@ import numpy as np
 _NUMBA_AUTO_MAX_N = 1000
 
 
+def _sigmoid(z):
+    return 1.0 / (1.0 + np.exp(-z))
+
+
+# Available node nonlinearities, for homogeneous or per-node (mixed) reservoirs.
+ACTIVATIONS = {
+    "tanh": np.tanh,
+    "sigmoid": _sigmoid,
+    "relu": lambda z: np.maximum(0.0, z),
+    "sin": np.sin,            # oscillator-like
+    "identity": lambda z: z,
+}
+
+
 @dataclass
 class EchoStateNetwork:
     """A leaky-integrator Echo State Network with a ridge-regression readout.
@@ -60,7 +74,17 @@ class EchoStateNetwork:
     input_scaling
         Scaling applied to the random input weights.
     leaking_rate
-        Leaky-integrator rate ``a`` in (0, 1]; 1.0 recovers a standard ESN.
+        Leaky-integrator rate ``a`` in (0, 1]; 1.0 recovers a standard ESN. May
+        be a **scalar** (homogeneous) or a per-node **array** of shape
+        ``(n_reservoir,)`` for *heterogeneous leaking rates / time constants* ---
+        different neurons then integrate at different speeds, giving a multi-scale
+        reservoir (see :func:`esnfed.topologies.leaking_rates`).
+    activation
+        Node nonlinearity. ``"tanh"`` (default), ``"sigmoid"``, ``"relu"``,
+        ``"sin"`` or ``"identity"``; a per-node **array** of those names for a
+        *multi-type* (mixed) reservoir (see
+        :func:`esnfed.topologies.mixed_activations`); or any callable applied
+        element-wise.
     ridge
         Tikhonov (ridge) regularisation strength for the readout.
     washout
@@ -90,7 +114,8 @@ class EchoStateNetwork:
     reservoir: np.ndarray
     spectral_radius: float = 0.9
     input_scaling: float = 1.0
-    leaking_rate: float = 1.0
+    leaking_rate: object = 1.0
+    activation: object = "tanh"
     ridge: float = 1e-6
     washout: int = 100
     bias: float = 1.0
@@ -142,15 +167,59 @@ class EchoStateNetwork:
             )
             self.W_in = np.ascontiguousarray(W_in, dtype=dt)
 
-        # Numba accelerates the dense float64 path only. It is a large win for
-        # small, overhead-bound reservoirs but on par with (or slower than) NumPy
-        # for large, BLAS-bound ones, so the automatic policy enables it only up
-        # to a size threshold; pass use_numba=True/False to override.
-        base = (not self._is_sparse) and dt == np.dtype(np.float64)
+        # Heterogeneous leaking rates / time constants: a scalar a, or a per-node
+        # vector so different neurons integrate at different speeds (multi-scale).
+        a = np.asarray(self.leaking_rate, dtype=dt)
+        if a.ndim == 0:
+            self._a = float(a)
+            self._hetero_leak = False
+        else:
+            a = np.broadcast_to(a.ravel(), (self.n_reservoir,)).astype(dt)
+            self._a = np.ascontiguousarray(a)
+            self._hetero_leak = True
+
+        # Multi-type node nonlinearities: one activation, a per-node array of
+        # activation names, or a callable.
+        self._activation_fn, self._hetero_act = self._build_activation()
+
+        # Numba accelerates the dense float64 path only, and only for the
+        # homogeneous scalar-leak / tanh case (heterogeneous reservoirs use the
+        # NumPy path). It is a large win for small reservoirs but on par with
+        # NumPy for large ones, so it is auto-enabled up to a size threshold.
+        base = ((not self._is_sparse) and dt == np.dtype(np.float64)
+                and not self._hetero_leak and not self._hetero_act)
         if self.use_numba is None:
             self._numba_enabled = base and self.n_reservoir <= _NUMBA_AUTO_MAX_N
         else:
             self._numba_enabled = base and bool(self.use_numba)
+
+    def _build_activation(self):
+        """Return ``(fn, is_heterogeneous)`` where ``fn(pre) -> activations``."""
+        act = self.activation
+        if callable(act):
+            return act, True
+        if isinstance(act, str):
+            if act not in ACTIVATIONS:
+                raise ValueError(f"unknown activation {act!r}; "
+                                 f"choices: {sorted(ACTIVATIONS)}")
+            return ACTIVATIONS[act], act != "tanh"
+        names = np.asarray(act)
+        if names.shape != (self.n_reservoir,):
+            raise ValueError("activation array must have length n_reservoir")
+        groups = []
+        for name in np.unique(names):
+            key = str(name)
+            if key not in ACTIVATIONS:
+                raise ValueError(f"unknown activation {key!r}")
+            groups.append((ACTIVATIONS[key], np.where(names == name)[0]))
+
+        def mixed(pre):
+            out = np.empty_like(pre)
+            for fn, idx in groups:
+                out[idx] = fn(pre[idx])
+            return out
+
+        return mixed, True
 
     # ------------------------------------------------------------------ states
     def harvest(self, u: np.ndarray, x0: np.ndarray | None = None) -> np.ndarray:
@@ -177,14 +246,15 @@ class EchoStateNetwork:
         if self._numba_enabled and x0 is None:
             fn = _get_numba_harvest()
             if fn is not None:
-                Z = fn(self.W, self.W_in, u, float(self.leaking_rate),
+                Z = fn(self.W, self.W_in, u, float(self._a),
                        float(self.bias), int(self.n_inputs))
                 self._last_state = Z[-1, 1 + self.n_inputs:] if len(Z) else \
                     np.zeros(self.n_reservoir)
                 return Z
 
-        Z = _harvest_numpy(self.W, self.W_in, u, self.leaking_rate, self.bias,
-                           self.n_inputs, self.n_reservoir, x0)
+        Z = _harvest_numpy(self.W, self.W_in, u, self._a, self.bias,
+                           self.n_inputs, self.n_reservoir, x0,
+                           act=self._activation_fn)
         self._last_state = Z[-1, 1 + self.n_inputs:] if len(Z) else \
             np.zeros(self.n_reservoir)
         return Z
@@ -231,8 +301,13 @@ class EchoStateNetwork:
 
 
 # --------------------------------------------------------------------- harvest
-def _harvest_numpy(W, W_in, u, a, bias, n_inputs, n_reservoir, x0):
-    """Pure-NumPy harvest; works for a dense ndarray or a SciPy CSR reservoir."""
+def _harvest_numpy(W, W_in, u, a, bias, n_inputs, n_reservoir, x0, act=np.tanh):
+    """Pure-NumPy harvest; works for a dense ndarray or a SciPy CSR reservoir.
+
+    ``a`` may be a scalar or a per-node array (heterogeneous leaking rates) and
+    ``act`` any element-wise callable (supports multi-type node nonlinearities);
+    both broadcast over the state vector.
+    """
     dt = W_in.dtype
     T = u.shape[0]
     x = (np.zeros(n_reservoir, dtype=dt) if x0 is None
@@ -243,7 +318,7 @@ def _harvest_numpy(W, W_in, u, a, bias, n_inputs, n_reservoir, x0):
         u_b[0] = bias
         u_b[1:] = u[t]
         pre = W_in @ u_b + W @ x
-        x = ((1.0 - a) * x + a * np.tanh(pre)).astype(dt, copy=False)
+        x = ((1.0 - a) * x + a * act(pre)).astype(dt, copy=False)
         Z[t, 0] = bias
         Z[t, 1 : 1 + n_inputs] = u[t]
         Z[t, 1 + n_inputs :] = x

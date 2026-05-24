@@ -52,6 +52,11 @@ Harvest throughput for the optional Numba / float32 / sparse accelerators.
 Federated = centralized; ensemble in between; local-only far behind.
 <iframe src="../plotly/result_exp10_accuracy.html" width="100%" height="440" frameborder="0"></iframe>
 
+### Reservoir heterogeneity extensions
+Depth and heterogeneous leaking rates help long-memory Mackey-Glass; multi-type
+nonlinearities help the faster Lorenz task (see [Advanced reservoirs](guide/advanced.md)).
+<iframe src="../plotly/result_exp11_heterogeneity.html" width="100%" height="440" frameborder="0"></iframe>
+
 ## Reservoir visualisations
 
 === "Topology"

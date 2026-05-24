@@ -86,6 +86,12 @@ EXPERIMENTS = {
         desc="Harvest throughput (steps/s) for NumPy f64/f32, Numba, sparse.",
         section="sec:res-performance", file="exp9_performance.csv",
         id=["N"]),
+    "exp11_heterogeneity": dict(
+        title="Reservoir heterogeneity extensions",
+        desc="NRMSE of heterogeneous leaking rates, multi-type node activations "
+             "and deep reservoirs on chaotic tasks (Mackey-Glass, Lorenz).",
+        section="sec:res-heterogeneity", file="exp11_heterogeneity.csv",
+        id=["task", "config", "seed"], dataset_col="task", method_col="config"),
 }
 
 

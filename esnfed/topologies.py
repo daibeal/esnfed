@@ -130,3 +130,73 @@ def graph_metrics(W: np.ndarray) -> dict:
         "clustering": float(nx.average_clustering(ug)),
         "avg_path_length": float(avg_path),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Heterogeneity generators (per-node leaking rates and node nonlinearities)
+# ─────────────────────────────────────────────────────────────────────────────
+def leaking_rates(n, kind="uniform", low=0.1, high=1.0, n_layers=3, rng=None):
+    """Per-node leaking rates ``a`` for a *heterogeneous / multi-scale* reservoir.
+
+    Different neurons integrate at different speeds, which helps tasks with mixed
+    time-scales (finance, chaotic systems such as Mackey-Glass).
+
+    Parameters
+    ----------
+    n
+        Number of reservoir nodes.
+    kind
+        ``"uniform"`` (i.i.d. in ``[low, high]``), ``"log_uniform"`` (log-spaced,
+        emphasising fast nodes), ``"layered"`` (``n_layers`` contiguous blocks
+        with decreasing rates, high → low, i.e. fast → slow groups), or
+        ``"constant"`` (all ``high``).
+    low, high
+        Range of leaking rates (each in ``(0, 1]``).
+    n_layers
+        Number of decreasing blocks for ``kind="layered"``.
+    rng
+        Seed or ``numpy`` generator.
+
+    Returns
+    -------
+    a : ndarray of shape (n,)
+        Per-node leaking rates, ready to pass as ``EchoStateNetwork(leaking_rate=a)``.
+    """
+    rng = np.random.default_rng(rng) if not isinstance(rng, np.random.Generator) else rng
+    if kind == "uniform":
+        return rng.uniform(low, high, size=n)
+    if kind == "log_uniform":
+        return np.exp(rng.uniform(np.log(low), np.log(high), size=n))
+    if kind == "constant":
+        return np.full(n, float(high))
+    if kind == "layered":
+        levels = np.linspace(high, low, max(1, n_layers))
+        return np.concatenate([
+            np.full(len(idx), levels[k])
+            for k, idx in enumerate(np.array_split(np.arange(n), max(1, n_layers)))
+        ])
+    raise ValueError(f"unknown kind {kind!r}")
+
+
+def mixed_activations(n, types=("tanh", "sigmoid", "sin"), weights=None, rng=None):
+    """Assign a node nonlinearity to each reservoir node (*multi-type* reservoir).
+
+    Mixing activation functions within one reservoir mimics biological neuronal
+    diversity and broadens the basis of dynamics. Returns an array of activation
+    names ready to pass as ``EchoStateNetwork(activation=...)``.
+
+    Parameters
+    ----------
+    n
+        Number of reservoir nodes.
+    types
+        Activation names to mix (see :data:`esnfed.esn.ACTIVATIONS`).
+    weights
+        Optional mixing proportions (defaults to uniform).
+    rng
+        Seed or ``numpy`` generator.
+    """
+    rng = np.random.default_rng(rng) if not isinstance(rng, np.random.Generator) else rng
+    types = list(types)
+    p = None if weights is None else np.asarray(weights, float) / np.sum(weights)
+    return rng.choice(types, size=n, p=p)

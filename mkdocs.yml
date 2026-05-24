@@ -119,6 +119,7 @@ nav:
     - Reservoir computing:
       - Echo State Networks: guide/esn.md
       - Reservoir topologies: guide/topologies.md
+      - Advanced reservoirs: guide/advanced.md
       - Datasets: guide/datasets.md
       - Visualisation: guide/viz.md
     - Federated learning:

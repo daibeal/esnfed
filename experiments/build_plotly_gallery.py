@@ -153,6 +153,17 @@ def main():
     save(_style(fig, "Benchmark classification accuracy (federated vs ensemble vs local)",
                 "dataset", "test accuracy"), "exp10_accuracy")
 
+    # exp11 — reservoir heterogeneity extensions (grouped bar, log y)
+    d = pd.read_sql("SELECT task, config, AVG(nrmse) nrmse FROM exp11_heterogeneity "
+                    "GROUP BY task, config", CON)
+    fig = go.Figure()
+    for cfg in ["baseline", "hetero_leaking", "multi_activation", "deep", "deep_hetero"]:
+        s = d[d["config"] == cfg]
+        fig.add_bar(x=s["task"], y=s["nrmse"], name=cfg.replace("_", " "))
+    fig.update_layout(barmode="group")
+    save(_style(fig, "Reservoir heterogeneity extensions (chaotic tasks)", "task",
+                "NRMSE (log)", logy=True), "exp11_heterogeneity")
+
     print("[gallery] done")
 
 
