@@ -27,6 +27,9 @@
   .card h2{margin:0 0 2px;font-size:19px}
   .card .desc{color:var(--muted);margin:.2em 0 14px;font-size:14px}
   canvas{width:100%;display:block;border-radius:10px;background:transparent}
+  #resCanvas,#traceCanvas{height:360px}
+  #stratCanvas,#barCanvas{height:340px}
+  #memCanvas{height:280px}
   .controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;margin:14px 0 2px}
   .ctl{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);min-width:120px}
   .ctl b{color:var(--ink);font-variant-numeric:tabular-nums}
@@ -229,8 +232,20 @@ function nrmse(y,p,a,b){let se=0,m=0,n=b-a;for(let t=a;t<b;t++)m+=y[t];m/=n;
   let vr=0;for(let t=a;t<b;t++){se+=(y[t]-p[t])**2;vr+=(y[t]-m)**2;}return Math.sqrt(se/(vr||1e-12));}
 
 /* ---------- canvas helpers ---------- */
-function fit(cv){const r=window.devicePixelRatio||1;const w=cv.clientWidth;const h=cv.height;
-  cv.width=w*r;cv.height=h*r;const ctx=cv.getContext('2d');ctx.setTransform(r,0,0,r,0,0);return {ctx,w,h};}
+function fit(cv){
+  // Capture the intended CSS height ONCE (from the original height attribute) and
+  // pin it, so the layout height never depends on the backing-store size. Without
+  // this, reading cv.height after setting cv.height*=dpr doubles it every frame.
+  const r=window.devicePixelRatio||1;
+  if(!cv.dataset.h){cv.dataset.h=cv.getAttribute('height')||cv.clientHeight||300;}
+  const h=+cv.dataset.h;
+  cv.style.height=h+'px';
+  const w=cv.clientWidth||(cv.parentElement&&cv.parentElement.clientWidth)||300;
+  const bw=Math.max(1,Math.round(w*r)), bh=Math.max(1,Math.round(h*r));
+  if(cv.width!==bw||cv.height!==bh){cv.width=bw;cv.height=bh;}
+  const ctx=cv.getContext('2d');ctx.setTransform(r,0,0,r,0,0);
+  return {ctx,w,h};
+}
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 function diverge(v){ // -1..1 -> color
   v=Math.max(-1,Math.min(1,v));
