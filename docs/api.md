@@ -37,6 +37,13 @@ Auto-generated from the source docstrings.
       show_root_heading: false
       show_root_toc_entry: false
 
+## `esnfed.classification` { #esnfedclassification }
+
+::: esnfed.classification
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
+
 ## `esnfed.interop` { #esnfedinterop }
 
 ::: esnfed.interop

@@ -10,11 +10,15 @@ topologies   Reservoir topology generators (random, small-world, scale-free, rin
 datasets     Benchmark sequential tasks (NARMA-10, Mackey-Glass, Lorenz, sine).
 metrics      Error metrics (NRMSE, MSE, memory capacity).
 federated    Federated strategies (FedAvg, exact federated ridge, ensemble, alignment).
+classification  Sequence classification + its exact federated / ensemble variants.
 """
 
 from .esn import EchoStateNetwork
 from .metrics import nrmse, mse, rmse
-from . import topologies, datasets, federated, metrics, interop, viz, llm_orchestration
+from . import (
+    topologies, datasets, federated, metrics, interop, viz,
+    classification, llm_orchestration,
+)
 
 __all__ = [
     "EchoStateNetwork",
@@ -27,7 +31,8 @@ __all__ = [
     "metrics",
     "interop",
     "viz",
+    "classification",
     "llm_orchestration",
 ]
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"

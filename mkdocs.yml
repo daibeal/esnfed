@@ -104,6 +104,7 @@ nav:
     - Reservoir topologies: guide/topologies.md
     - Datasets: guide/datasets.md
     - Federated strategies: guide/federated.md
+    - Sequence classification: guide/classification.md
     - Visualisation: guide/viz.md
     - Interoperability: guide/interop.md
   - Performance: performance.md

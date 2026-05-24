@@ -37,6 +37,39 @@ u, y = datasets.load_csv("prices.csv", column="close")
 u, y = datasets.load_fred("BAMLH0A0HYM2")   # US high-yield credit spread
 ```
 
+## High-dimensional multivariate (FRED panel)
+
+`load_fred_matrix` aligns several FRED series on their common dates into a
+multivariate task — forecast the next value of a `target` series from the whole
+panel. This exercises high-dimensional input scaling (a larger reservoir helps as
+`d` grows).
+
+```python
+# forecast counterparty risk (TED spread) from a 4-series financial panel
+u, y = datasets.load_fred_matrix(["TEDRATE", "VIXCLS", "DGS10", "DFF"])
+print(u.shape)   # (T-1, 4)  ->  d_in = 4
+```
+
+## Benchmark classification datasets
+
+Two standard sequence-classification benchmarks, each with a **natural client
+split**, are downloaded on demand and cached. They return a `SequenceDataset`
+(`X_*` lists of `(T_i, n_features)` sequences, integer labels, and `groups_*`
+giving the federation unit). See [Sequence classification](classification.md).
+
+```python
+jv = datasets.load_japanese_vowels()   # UCI 128: 9 speakers, 12-d cepstra
+har = datasets.load_har()              # UCI 240: 30 subjects, 6 activities, 9 channels
+
+# one client per natural group (speaker / subject)
+clients = datasets.group_clients(jv.X_train, jv.y_train, jv.groups_train)
+```
+
+| Loader | Task | Natural clients | Heterogeneity |
+|--------|------|-----------------|---------------|
+| `load_japanese_vowels` | speaker ID (9 classes) | 9 speakers (= labels) | extreme **label skew** |
+| `load_har` | activity (6 classes) | 30 subjects | **feature** non-i.i.d. |
+
 ## Splitting and partitioning
 
 ```python
