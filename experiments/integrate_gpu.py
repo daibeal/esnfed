@@ -65,14 +65,14 @@ lines = [
     r"communication: FedResPrompt trades accuracy for communication/edge "
     r"efficiency, it does not dominate LoRA.}",
     r"  \label{tab:exp12-gpu-scale}",
-    r"  \begin{tabular}{lrrrr}", r"    \toprule",
+    r"  \fitwidth{\begin{tabular}{lrrrr}", r"    \toprule",
     r"    Model & Params & Zero-shot & FedResPrompt & Comm.\ saving \\",
     r"    \midrule",
 ]
 for m, p, z, a, c in rows:
     lines.append(f"    \\texttt{{{m}}} & {p:.1f}B & {z:.3f} & "
                  f"\\textbf{{{a:.3f}}} & {c:.0f}$\\times$ \\\\")
-lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
+lines += [r"    \bottomrule", r"  \end{tabular}}", r"\end{table}", ""]
 (TAB / "exp12_gpu_scale.tex").write_text("\n".join(lines), encoding="utf-8")
 print("table  ->", TAB / "exp12_gpu_scale.tex")
 print("\n".join(f"  {m:24s} zero={z:.3f} FRP={a:.3f} comm={c}x" for m, p, z, a, c in rows))

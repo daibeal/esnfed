@@ -156,7 +156,7 @@ def save_latex_table(df: pd.DataFrame, name: str, caption: str, label: str,
         r"  \centering",
         f"  \\caption{{{caption}}}",
         f"  \\label{{{label}}}",
-        f"  \\begin{{tabular}}{{{colspec}}}",
+        f"  \\fitwidth{{\\begin{{tabular}}{{{colspec}}}",
         r"    \toprule",
         "    " + header,
         r"    \midrule",
@@ -169,7 +169,7 @@ def save_latex_table(df: pd.DataFrame, name: str, caption: str, label: str,
             else:
                 cells.append(_fmt_cell(v, float_format))
         lines.append("    " + " & ".join(cells) + r" \\")
-    lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
+    lines += [r"    \bottomrule", r"  \end{tabular}}", r"\end{table}", ""]
     path.write_text("\n".join(lines), encoding="utf-8")
     print(f"  latex  -> {path.relative_to(REPO_ROOT)}")
     return path
