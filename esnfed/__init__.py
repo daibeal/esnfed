@@ -10,8 +10,9 @@ esn          Echo State Network (reservoir + ridge readout); supports
 deep         Hierarchical / deep Echo State Networks (stacked reservoirs).
 topologies   Reservoir topology generators (random, small-world, scale-free,
              ring) + per-node leaking-rate and mixed-activation generators.
-datasets     Benchmark sequential tasks (NARMA-10, Mackey-Glass, Lorenz, sine).
-metrics      Error metrics (NRMSE, MSE, memory capacity).
+datasets     Benchmark tasks (NARMA-10, Mackey-Glass, Lorenz) and real / external
+             datasets (TED spread, multivariate FRED panels, Japanese Vowels, HAR).
+metrics      Error metrics (NRMSE, RMSE, MSE, R^2).
 federated    Federated strategies (FedAvg, exact federated ridge, ensemble, alignment).
 classification  Sequence classification + its exact federated / ensemble variants.
 """
