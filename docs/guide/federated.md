@@ -4,6 +4,19 @@ In an ESN only the linear readout is trained, so federated learning reduces to
 learning a shared (or combinable) readout across clients whose reservoirs may or
 may not share the same structure.
 
+```mermaid
+flowchart LR
+  subgraph clients["Clients (data stays local)"]
+    c1["Client 1<br/>A₁, B₁"]
+    c2["Client 2<br/>A₂, B₂"]
+    ck["Client K<br/>A_K, B_K"]
+  end
+  c1 --> S["Server<br/>A = ΣAₖ, B = ΣBₖ<br/>solve (A+βI)Wᵀ = B"]
+  c2 --> S
+  ck --> S
+  S -. "broadcast W_out" .-> clients
+```
+
 ## Shared reservoir
 
 ### Exact federated ridge

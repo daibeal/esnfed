@@ -46,6 +46,17 @@ with its own size, spectral radius and (decreasing) leaking rate. This builds a
 hierarchy of progressively slower dynamics and markedly boosts memory and
 nonlinearity over a single layer of the same total size.
 
+```mermaid
+flowchart LR
+  u["input"] --> L1["reservoir 1<br/>fast (a=0.9)"]
+  L1 --> L2["reservoir 2<br/>medium (a=0.5)"]
+  L2 --> L3["reservoir 3<br/>slow (a=0.2)"]
+  L1 --> RO["readout<br/>(all layers' states)"]
+  L2 --> RO
+  L3 --> RO
+  RO --> y["output"]
+```
+
 ```python
 from esnfed import DeepEchoStateNetwork, topologies
 

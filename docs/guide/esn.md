@@ -5,6 +5,16 @@ Computing* paradigm. A large, fixed, randomly connected recurrent layer — the
 **reservoir** — projects the input into a high-dimensional dynamical feature
 space; only a linear **readout** is trained, by ridge regression.
 
+```mermaid
+flowchart LR
+  u["input u(t)"] --> Win["W_in<br/>(fixed)"]
+  Win --> R["reservoir W<br/>fixed, recurrent<br/>state x(t)"]
+  R -->|recurrence| R
+  R --> Wout["readout W_out<br/>trained, ridge"]
+  u -. "[b; u; x]" .-> Wout
+  Wout --> y["output ŷ(t)"]
+```
+
 State update (leaky-integrator neurons):
 
 $$

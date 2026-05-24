@@ -66,6 +66,23 @@ readouts live in different spaces — you cannot average parameters. Two answers
 The empirical finding: the ensemble is the safe default; alignment only pays off
 near full homogenisation.
 
+## Library architecture
+
+Topology and dataset generators feed the core `esn` (reservoir + ridge readout);
+because its sufficient statistics are additive across clients, federation is a
+sum-and-solve. Everything else builds on that core.
+
+```mermaid
+flowchart LR
+  topo["topologies"] --> esn["esn<br/>reservoir + ridge<br/>stats (A, B)"]
+  data["datasets"] --> esn
+  esn --> fed["federated"]
+  esn --> clf["classification"]
+  esn --> deep["deep"]
+  esn --> llm["llm_orchestration<br/>(FedResPrompt)"]
+  esn -.-> sup["metrics, viz, interop"]
+```
+
 ## Where it goes next
 
 [FedResPrompt](fedresprompt.md) takes the same efficiency to large language
