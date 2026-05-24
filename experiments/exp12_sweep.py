@@ -75,7 +75,7 @@ def main():
 
     a = SimpleNamespace(clients=args_cli.clients, rounds=args_cli.rounds,
                         local_epochs=2, batch=8, n_train=512, n_test=512,
-                        reservoir=200, prompt_tokens=4, k=16, lora_r=8, lr=3e-3,
+                        reservoir=200, prompt_tokens=4, k=16, lora_r=8, lr=3e-3, lora_lr=1e-4,
                         max_len=64, alpha=0.3, seed=0)
     results = []
     for name in args_cli.models:

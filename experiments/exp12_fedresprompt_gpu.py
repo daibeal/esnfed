@@ -253,8 +253,11 @@ def run_fedlora(model, tok, clients_data, test, label_ids, args, device):
         states = []
         for cdata in clients_data:
             set_lora(global_state)
-            opt = torch.optim.Adam([p for p in peft_model.parameters() if p.requires_grad],
-                                   lr=args.lr)
+            # LoRA needs its own, lower learning rate than the tiny FedResPrompt
+            # controller: the shared 3e-3 makes LoRA diverge on a large LLM.
+            lora_lr = getattr(args, "lora_lr", 1e-4)
+            opt = torch.optim.Adam(
+                [p for p in peft_model.parameters() if p.requires_grad], lr=lora_lr)
             peft_model.train()
             for _ in range(args.local_epochs):
                 for batch in batches(cdata, args.batch):
@@ -288,7 +291,8 @@ def main():
     ap.add_argument("--prompt-tokens", type=int, default=4)
     ap.add_argument("--k", type=int, default=16)
     ap.add_argument("--lora-r", type=int, default=8)
-    ap.add_argument("--lr", type=float, default=3e-3)
+    ap.add_argument("--lr", type=float, default=3e-3, help="FedResPrompt controller lr")
+    ap.add_argument("--lora-lr", type=float, default=1e-4, help="LoRA lr (lower!)")
     ap.add_argument("--max-len", type=int, default=64)
     ap.add_argument("--alpha", type=float, default=0.3)
     ap.add_argument("--seed", type=int, default=0)
