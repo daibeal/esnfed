@@ -27,16 +27,22 @@ theme:
         icon: material/weather-sunny
         name: Switch to light mode
   features:
-    - navigation.tabs
-    - navigation.sections
-    - navigation.top
-    - navigation.instant
-    - navigation.tracking
+    - navigation.tabs           # top-level groups become tabs
+    - navigation.tabs.sticky    # keep the tab bar on scroll
+    - navigation.top            # back-to-top button
+    - navigation.footer         # prev/next links
+    - navigation.instant        # SPA-style navigation
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.tracking       # update URL with the active anchor
+    - navigation.prune          # render only the visible nav (smaller pages)
     - toc.follow
     - content.code.copy
     - content.code.annotate
+    - content.tooltips
     - search.suggest
     - search.highlight
+    - search.share
 
 markdown_extensions:
   - admonition
@@ -82,6 +88,10 @@ plugins:
             show_signature_annotations: true
             merge_init_into_class: true
             docstring_section_style: table
+  - minify:
+      minify_html: true
+      htmlmin_opts:
+        remove_comments: true
 
 extra_javascript:
   - javascripts/mathjax.js
@@ -96,22 +106,27 @@ extra:
 
 nav:
   - Home: index.md
-  - Playground: playground.html
-  - Installation: install.md
-  - Quickstart: quickstart.md
-  - Concepts: concepts.md
+  - Get started:
+    - Installation: install.md
+    - Quickstart: quickstart.md
+    - Concepts: concepts.md
   - User guide:
-    - Echo State Networks: guide/esn.md
-    - Reservoir topologies: guide/topologies.md
-    - Datasets: guide/datasets.md
-    - Federated strategies: guide/federated.md
-    - Sequence classification: guide/classification.md
-    - Visualisation: guide/viz.md
-    - Interoperability: guide/interop.md
-  - Performance: performance.md
-  - Examples: examples.md
-  - Gallery: gallery.md
-  - Tutorial (notebook): tutorial.ipynb
-  - FedResPrompt: fedresprompt.md
-  - Results database: results.md
-  - API reference: api.md
+    - Reservoir computing:
+      - Echo State Networks: guide/esn.md
+      - Reservoir topologies: guide/topologies.md
+      - Datasets: guide/datasets.md
+      - Visualisation: guide/viz.md
+    - Federated learning:
+      - Federated strategies: guide/federated.md
+      - Sequence classification: guide/classification.md
+      - FedResPrompt: fedresprompt.md
+    - Integrations & performance:
+      - Interoperability: guide/interop.md
+      - Performance: performance.md
+  - Explore:
+    - Playground: playground.html
+    - Gallery: gallery.md
+    - Examples: examples.md
+    - Tutorial notebook: tutorial.ipynb
+    - Results database: results.md
+  - API: api.md

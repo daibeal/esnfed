@@ -78,6 +78,7 @@ docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.24",
     "mkdocs-jupyter>=0.24",
+    "mkdocs-minify-plugin>=0.7",
     "jupyterlite-core>=0.3",
     "jupyterlite-pyodide-kernel>=0.3",
     "jupyter-server>=2.0",
