@@ -244,10 +244,9 @@ def run_fedlora(model, tok, clients_data, test, label_ids, args, device):
                 correct += (logits(texts).argmax(1) == ys).sum().item()
         return correct / len(test)
 
-    init = lora_state()
-    for k in init:
-        init[k] = torch.zeros_like(init[k])  # start from base model (zeros = no adapter)
-    set_lora(init)
+    # Use PEFT's default init (lora_A random, lora_B = 0): the adapter is inert at
+    # the start (output == base model) but gradients flow (zeroing lora_A too would
+    # kill the gradient and freeze LoRA forever).
     history = [evaluate()]
     global_state = lora_state()
     for rnd in range(args.rounds):
