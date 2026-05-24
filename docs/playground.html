@@ -63,13 +63,12 @@
     <p class="desc">Each dot is a reservoir neuron and the lines are its
       connections; colour is the activation as the input drives the network, and
       node size grows with degree (so scale-free <b>hubs</b> stand out). Switch the
-      <b>structure</b> — ring, small-world, scale-free or random — to see how
-      connectivity changes the dynamics. The right panel runs the <b>echo state
-      test</b>: two copies start from <i>different</i> states and get the
-      <i>same</i> input — if their distance shrinks to zero, the network has
-      forgotten where it started (the echo state property holds). A spectral
-      radius below 1 guarantees this; raising it lengthens the memory (the start is
-      forgotten more slowly). Pick an input and press play.</p>
+      <b>structure</b> (ring, chain, lattice, small-world, scale-free, modular,
+      star or random) and the <b>input</b> to see how connectivity and drive shape
+      the dynamics. The right panel shows the <b>activation of each neuron over
+      time</b> — one coloured trace per neuron, scrolling as the reservoir
+      responds to the input. A higher spectral radius lengthens the memory. Pick a
+      structure and input, then press play.</p>
     <div class="grid2">
       <canvas id="resCanvas" height="360"></canvas>
       <canvas id="traceCanvas" height="360"></canvas>
@@ -371,7 +370,7 @@ function onResize(cv,fn){
 (function(){
   const cv=document.getElementById('resCanvas'), tc=document.getElementById('traceCanvas');
   if(!cv)return;
-  let res,x,x2,t,playing=false,signal=[],echo=[],raf=null,seed=12345;
+  let res,x,t,playing=false,signal=[],raf=null,seed=12345,hist=[],pickIdx=[];
   const N=()=>+document.getElementById('resN').value;
   const TOPO=()=>document.getElementById('resTopo').value;
   function genSignal(kind,T){const s=new Array(T);let rw=0;for(let i=0;i<T;i++){
@@ -387,11 +386,11 @@ function onResize(cv,fn){
   function rebuild(){
     const rho=+document.getElementById('resRho').value, n=N();
     res=makeReservoirTopo(TOPO(),n,rho,seed); x=new Float64Array(n); t=0;
-    // a second copy from a DIFFERENT initial state (for the echo state test)
-    x2=new Float64Array(n); const g=mulberry32((seed^0x9e3779b9)>>>0);
-    for(let i=0;i<n;i++)x2[i]=2*g()-1;
+    // sample up to 24 neurons to trace over time (one coloured line each)
+    const K=Math.min(n,24); pickIdx=[];
+    for(let j=0;j<K;j++)pickIdx.push(Math.floor(j*(n-1)/Math.max(1,K-1)));
     signal=genSignal(document.getElementById('resInput').value,100000);
-    echo=[];
+    hist=[];
   }
   function draw(){
     const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
@@ -411,35 +410,26 @@ function onResize(cv,fn){
     ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='center';
     ctx.fillText(kind.replace('_','-')+'   ·   input '+u.toFixed(2)+'   ·   t='+t,w/2,h-8);
   }
-  function drawTrace(){
+  function drawTrace(){   // scrolling activation of each sampled neuron over time
     const {ctx,w,h}=fit(tc);ctx.clearRect(0,0,w,h);
-    const pad=26, base=h-26, top=48, M=160;
     ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='left';
-    ctx.fillText('echo state test — two runs, different starts, same input',pad-10,18);
-    ctx.fillText('distance → 0  ⇒  the initial state is forgotten (ESP holds)',pad-10,34);
-    ctx.strokeStyle=css('--muted');ctx.globalAlpha=0.5;ctx.beginPath();ctx.moveTo(pad,base);ctx.lineTo(w-6,base);ctx.stroke();ctx.globalAlpha=1;
-    if(!echo.length){ctx.fillStyle=css('--muted');ctx.textAlign='center';ctx.font='12px system-ui';
-      ctx.fillText('press ▶ play to run the echo-state test',(pad+w-6)/2,(top+base)/2);}
-    const maxd=Math.max(0.6,...echo);
-    ctx.strokeStyle=css('--accent');ctx.lineWidth=2.4;ctx.beginPath();
-    for(let i=0;i<echo.length;i++){const xx=pad+(w-pad-6)*i/M;
-      const yy=base-(base-top)*Math.min(echo[i],maxd)/maxd;
-      i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);}
-    ctx.stroke();ctx.lineWidth=1;
-    const cur=echo.length?echo[echo.length-1]:0;
-    ctx.fillStyle=css('--accent');ctx.textAlign='right';
-    ctx.fillText('distance '+cur.toFixed(3)+(cur<0.05?'  forgotten ✓':''),w-8,top-4);
+    ctx.fillText('neuron activations over time — '+pickIdx.length+' of '+res.N+' neurons',10,16);
+    if(!hist.length){ctx.textAlign='center';
+      ctx.fillText('press ▶ play to drive the reservoir',w/2,Math.round(h/2));return;}
+    const top=26, bot=8, K=pickIdx.length, bh=(h-top-bot)/K, half=bh*0.46, L=10, Wd=w-16, M=160;
+    for(let j=0;j<K;j++){
+      const cyj=top+bh*(j+0.5), hue=Math.round(330*j/Math.max(1,K-1));
+      ctx.strokeStyle='hsl('+hue+',78%,62%)';ctx.lineWidth=1.4;ctx.beginPath();
+      for(let i=0;i<hist.length;i++){const xx=L+Wd*i/(M-1);const yy=cyj-hist[i][j]*half;
+        i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);}
+      ctx.stroke();
+    }
+    ctx.lineWidth=1;
   }
   function step(){
     const a=+document.getElementById('resLeak').value, u=signal[t]||0;
-    // periodically restart the second run from a fresh random state, so the
-    // echo-state test *repeats* (distance jumps up, then decays to 0 again)
-    // instead of flat-lining forever once it has first converged
-    if(t>0 && t%80===0){const g=mulberry32((seed^(t*2654435761))>>>0);
-      for(let i=0;i<res.N;i++)x2[i]=2*g()-1;}
-    stepState(res,x,u,a,1); stepState(res,x2,u,a,1);   // same input, two starts
-    let d=0;for(let i=0;i<res.N;i++)d+=(x[i]-x2[i])**2;
-    echo.push(Math.sqrt(d)); if(echo.length>160)echo.shift();
+    stepState(res,x,u,a,1);
+    hist.push(pickIdx.map(k=>x[k])); if(hist.length>160)hist.shift();
     t++;
   }
   function loop(){ if(!playing)return; step(); draw(); drawTrace(); raf=requestAnimationFrame(loop);}
