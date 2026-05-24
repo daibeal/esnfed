@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -197,10 +198,16 @@ def run_fedresprompt(model, tok, reservoir, clients_data, test, label_ids, args,
 # ------------------------------------------------------------ Federated LoRA
 def run_fedlora(model, tok, clients_data, test, label_ids, args, device):
     from peft import LoraConfig, get_peft_model
-    cfg = LoraConfig(r=args.lora_r, lora_alpha=2 * args.lora_r, lora_dropout=0.0,
-                     target_modules=["q_proj", "v_proj"], bias="none",
-                     task_type="CAUSAL_LM")
-    peft_model = get_peft_model(model, cfg)
+
+    def make_peft(targets):
+        return get_peft_model(model, LoraConfig(
+            r=args.lora_r, lora_alpha=2 * args.lora_r, lora_dropout=0.0,
+            target_modules=targets, bias="none", task_type="CAUSAL_LM"))
+
+    try:  # standard Llama/Qwen/Mistral/Phi attention projections
+        peft_model = make_peft(["q_proj", "v_proj"])
+    except (ValueError, KeyError):  # other architectures -> all linear layers
+        peft_model = make_peft("all-linear")
     peft_model.eval()
 
     def lora_state():
@@ -283,15 +290,16 @@ def main():
     from transformers import AutoModelForCausalLM, AutoTokenizer
     device = "cuda"
     print(f"[exp12] loading {args.model} ({args.load}) ...")
-    tok = AutoTokenizer.from_pretrained(args.model)
+    auth = dict(trust_remote_code=True, token=os.environ.get("HF_TOKEN"))
+    tok = AutoTokenizer.from_pretrained(args.model, **auth)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    kw = {}
+    kw = dict(auth)
     if args.load == "bf16":
-        kw = dict(torch_dtype=torch.bfloat16, device_map=device)
+        kw.update(torch_dtype=torch.bfloat16, device_map=device)
     else:
         from transformers import BitsAndBytesConfig
-        kw = dict(device_map=device, quantization_config=BitsAndBytesConfig(
+        kw.update(device_map=device, quantization_config=BitsAndBytesConfig(
             load_in_8bit=(args.load == "8bit"), load_in_4bit=(args.load == "4bit"),
             bnb_4bit_compute_dtype=torch.bfloat16))
     t0 = time.time()
