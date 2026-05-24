@@ -112,4 +112,5 @@ nav:
   - Examples: examples.md
   - Tutorial (notebook): tutorial.ipynb
   - FedResPrompt: fedresprompt.md
+  - Results database: results.md
   - API reference: api.md

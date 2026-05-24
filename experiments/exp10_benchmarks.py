@@ -143,6 +143,21 @@ def main():
                 "the two classification tasks; NRMSE (lower better) for the FRED "
                 "forecasting panel.",
         label="tab:exp10-benchmarks")
+    # tidy long-format CSV for the consolidated results database
+    rows = []
+    for s in ("centralized", "federated", "local"):
+        rows.append(["japanese_vowels", "speaker identification", "accuracy", s,
+                     None, jv[s]])
+    for s in ("federated", "ensemble", "local"):
+        rows.append(["har", "activity recognition", "accuracy", s, None, hr[s]])
+    for i, nc in enumerate(fr["counts"]):
+        rows.append(["fred_panel", "ted_spread forecast", "nrmse", "federated",
+                     nc, fr["federated"][i]])
+        rows.append(["fred_panel", "ted_spread forecast", "nrmse", "local_median",
+                     nc, fr["local"][i]])
+    common.save_table(pd.DataFrame(
+        rows, columns=["dataset", "task", "metric", "strategy", "n_clients",
+                       "value"]), "exp10_benchmarks")
     print("[exp10] done")
 
 
