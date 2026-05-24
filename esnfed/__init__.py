@@ -15,6 +15,8 @@ datasets     Benchmark tasks (NARMA-10, Mackey-Glass, Lorenz) and real / externa
 metrics      Error metrics (NRMSE, RMSE, MSE, R^2).
 federated    Federated strategies (FedAvg, exact federated ridge, ensemble, alignment).
 classification  Sequence classification + its exact federated / ensemble variants.
+privacy      Differential privacy + secure aggregation for the federated statistics.
+streaming    Incremental / streaming ridge (accumulate A, B; RLS online updates).
 """
 
 from .esn import EchoStateNetwork
@@ -22,7 +24,7 @@ from .deep import DeepEchoStateNetwork
 from .metrics import nrmse, mse, rmse
 from . import (
     topologies, datasets, federated, metrics, interop, viz,
-    classification, deep, llm_orchestration,
+    classification, deep, llm_orchestration, privacy, streaming,
 )
 
 __all__ = [
@@ -40,6 +42,8 @@ __all__ = [
     "classification",
     "deep",
     "llm_orchestration",
+    "privacy",
+    "streaming",
 ]
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"

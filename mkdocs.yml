@@ -125,6 +125,7 @@ nav:
     - Federated learning:
       - Federated strategies: guide/federated.md
       - Sequence classification: guide/classification.md
+      - Privacy & streaming: guide/privacy.md
       - FedResPrompt: fedresprompt.md
     - Integrations & performance:
       - Interoperability: guide/interop.md

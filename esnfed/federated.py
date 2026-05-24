@@ -35,6 +35,7 @@ import numpy as np
 
 from .esn import EchoStateNetwork, ridge_statistics, solve_readout
 from .metrics import nrmse
+from .privacy import PrivacyConfig, dp_statistics, secure_sum
 
 
 @dataclass
@@ -100,6 +101,52 @@ def federated_ridge(clients: list[Client], esn: EchoStateNetwork) -> np.ndarray:
         Ak, Bk = ridge_statistics(c.states(), c.targets())
         A += Ak
         B += Bk
+    return solve_readout(A, B, esn.ridge)
+
+
+def federated_ridge_dp(
+    clients: list[Client], esn: EchoStateNetwork, cfg: PrivacyConfig
+) -> np.ndarray:
+    """Differentially private federated ridge (shared reservoir).
+
+    Each client privatises its own statistics with the Gaussian mechanism (clip +
+    noise, see :func:`esnfed.privacy.dp_statistics`) before they are summed and
+    solved once. The readout is then :math:`(\\varepsilon, \\delta)`-DP w.r.t. every
+    client's records. Independent noise is drawn per client from ``cfg.seed``.
+    Unlike :func:`federated_ridge` this is *not* exact -- the clipping and noise
+    are the price of the formal privacy guarantee.
+    """
+    A = np.zeros((esn.readout_dim, esn.readout_dim))
+    B = np.zeros((esn.readout_dim, esn.n_outputs))
+    base = np.random.default_rng(cfg.seed)
+    for c in clients:
+        child = np.random.default_rng(int(base.integers(0, 2**63 - 1)))
+        Ak, Bk = dp_statistics(c.states(), c.targets(), cfg, rng=child)
+        A += Ak
+        B += Bk
+    return solve_readout(A, B, esn.ridge)
+
+
+def federated_ridge_secure(
+    clients: list[Client], esn: EchoStateNetwork, *, seed: int | None = None,
+    mask_scale: float = 1.0,
+) -> np.ndarray:
+    """Exact federated ridge via secure aggregation (additive masking).
+
+    Clients mask their ``(A_k, B_k)`` with pairwise-cancelling noise (see
+    :func:`esnfed.privacy.secure_sum`), so the server obtains only the masked sum
+    and never an individual client's statistics. The masks cancel, so the solved
+    readout equals :func:`federated_ridge` up to floating-point round-off
+    (it is exact in the fixed-point/modular arithmetic of a real protocol).
+    """
+    As, Bs = [], []
+    for c in clients:
+        Ak, Bk = ridge_statistics(c.states(), c.targets())
+        As.append(Ak)
+        Bs.append(Bk)
+    rng = np.random.default_rng(seed)
+    A = secure_sum(As, rng=rng, scale=mask_scale)
+    B = secure_sum(Bs, rng=rng, scale=mask_scale)
     return solve_readout(A, B, esn.ridge)
 
 
