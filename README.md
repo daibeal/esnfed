@@ -216,6 +216,26 @@ See [`CHANGELOG.md`](CHANGELOG.md) for the defects this uncovered, and the note 
 what *exact* federated ridge means precisely (it is exact per partition; the
 readout itself is limited by the conditioning of the Gram matrix).
 
+## Releasing
+
+Releases are published to PyPI by pushing a version tag; the workflow verifies
+that the tag matches `esnfed.__version__`, runs the test suite, lints, builds and
+uploads via PyPI Trusted Publishing (no API token is stored in the repository).
+
+```bash
+# 1. bump __version__ in esnfed/__init__.py and update CHANGELOG.md
+# 2. tag and push
+git tag v1.7.0 && git push origin v1.7.0
+```
+
+A one-time setup is needed on PyPI before the first automated release — add a
+trusted publisher at <https://pypi.org/manage/project/esnfed/settings/publishing/>
+with workflow `release.yml` and environment `pypi`. Until then, publish manually:
+
+```bash
+python -m build && python -m twine upload dist/*
+```
+
 ## Data attribution
 
 The bundled TED spread is sourced from the Federal Reserve Bank of St. Louis
