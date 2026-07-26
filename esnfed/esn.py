@@ -475,7 +475,10 @@ def _harvest_kernel(W, W_in, u, a, bias, n_inputs):
     return Z
 
 
-_NUMBA_FN = None
+# Tri-state cache: None = not attempted yet, False = Numba unavailable or the
+# compilation failed, otherwise the compiled kernel. Annotated as Any because the
+# compiled value is a numba Dispatcher only when numba happens to be installed.
+_NUMBA_FN: Any = None
 
 
 def _get_numba_harvest():
