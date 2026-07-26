@@ -9,10 +9,17 @@
     --bg:#0f1220; --panel:#171a2b; --ink:#e8eaf2; --muted:#9aa3c0;
     --accent:#7c6cff; --blue:#4C72B0; --green:#55A868; --red:#C44E52;
     --purple:#8172B3; --orange:#DD8452; --line:#2a2f4a;
+    --glow:rgba(124,108,255,.28); --grid:rgba(154,163,192,.14);
   }
   @media (prefers-color-scheme: light){
-    :root{ --bg:#f6f7fb; --panel:#ffffff; --ink:#16182a; --muted:#5b6385; --line:#e4e7f2; }
+    :root{ --bg:#f6f7fb; --panel:#ffffff; --ink:#16182a; --muted:#5b6385; --line:#e4e7f2;
+           --glow:rgba(124,108,255,.18); --grid:rgba(91,99,133,.16); }
   }
+  /* Explicit theme overrides beat the media query in both directions. */
+  :root[data-theme="dark"]{ --bg:#0f1220; --panel:#171a2b; --ink:#e8eaf2; --muted:#9aa3c0;
+    --line:#2a2f4a; --glow:rgba(124,108,255,.28); --grid:rgba(154,163,192,.14); }
+  :root[data-theme="light"]{ --bg:#f6f7fb; --panel:#ffffff; --ink:#16182a; --muted:#5b6385;
+    --line:#e4e7f2; --glow:rgba(124,108,255,.18); --grid:rgba(91,99,133,.16); }
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
        background:var(--bg);color:var(--ink);line-height:1.5}
@@ -47,21 +54,72 @@
   @media(min-width:760px){.grid2{grid-template-columns:1.5fr 1fr}}
   footer{max-width:1100px;margin:0 auto;padding:0 20px 50px;color:var(--muted);font-size:13px}
   .pill{font-size:11px;background:var(--line);color:var(--muted);padding:2px 8px;border-radius:999px}
+  .pill.d3{background:linear-gradient(90deg,var(--accent),var(--purple));color:#fff;font-weight:600}
+
+  /* ---- section navigation ---- */
+  nav.jump{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line);margin-bottom:4px}
+  nav.jump ul{max-width:1100px;margin:0 auto;padding:9px 20px;display:flex;gap:6px;
+    list-style:none;overflow-x:auto;scrollbar-width:thin}
+  nav.jump a{white-space:nowrap;font-size:12.5px;color:var(--muted);text-decoration:none;
+    padding:5px 11px;border-radius:999px;border:1px solid transparent;transition:.16s}
+  nav.jump a:hover{color:var(--ink);border-color:var(--line)}
+  nav.jump a.on{color:#fff;background:var(--accent);border-color:var(--accent)}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+  #themeBtn{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500}
+
+  /* ---- 3D viewport affordances ---- */
+  .stage{position:relative}
+  .stage canvas{cursor:grab;touch-action:none}
+  .stage canvas:active{cursor:grabbing}
+  .stage .hint{position:absolute;right:10px;top:10px;font-size:11px;color:var(--muted);
+    background:color-mix(in srgb,var(--panel) 80%,transparent);border:1px solid var(--line);
+    padding:3px 9px;border-radius:999px;pointer-events:none;opacity:.9}
+  .readout{display:flex;flex-wrap:wrap;gap:10px 20px;margin-top:12px;font-size:13px}
+  .stat{border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:104px}
+  .stat s{display:block;text-decoration:none;color:var(--muted);font-size:11px;letter-spacing:.04em;
+    text-transform:uppercase}
+  .stat b{font-size:17px;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--muted);border-left:2px solid var(--accent);
+    padding:2px 0 2px 10px;margin-top:12px}
+  progress{width:180px;height:8px;accent-color:var(--accent)}
+  button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <header>
-  <h1>esnfed <span class="sw">playground</span></h1>
-  <p>Everything here runs live in your browser — a tiny Echo State Network
-     (reservoir + ridge readout) implemented in plain JavaScript. Drag the
-     sliders, press play, re-roll the reservoirs, and watch it move.
-     &nbsp;<a href="./">← back to the docs</a></p>
+  <div class="topbar">
+    <div>
+      <h1>esnfed <span class="sw">playground</span></h1>
+      <p>Everything here runs live in your browser — a tiny Echo State Network
+         (reservoir + ridge readout) implemented in plain JavaScript, with no
+         libraries and no server. Drag the sliders, orbit the 3D views, press play.
+         &nbsp;<a href="./">← back to the docs</a></p>
+    </div>
+    <button id="themeBtn" class="ghost" aria-label="Switch colour theme">◐ theme</button>
+  </div>
 </header>
+<nav class="jump" aria-label="Jump to a demo">
+  <ul>
+    <li><a href="#w1">1 · Reservoir in 3D</a></li>
+    <li><a href="#w5">2 · State space</a></li>
+    <li><a href="#w6">3 · Lorenz attractor</a></li>
+    <li><a href="#w7">4 · Hyper-parameters</a></li>
+    <li><a href="#w2">5 · Federated strategies</a></li>
+    <li><a href="#w8">6 · Privacy</a></li>
+    <li><a href="#w9">7 · Online learning</a></li>
+    <li><a href="#w3">8 · Memory</a></li>
+    <li><a href="#w4">9 · Speaker ID</a></li>
+  </ul>
+</nav>
 <main>
 
   <!-- WIDGET 1: reservoir activations -->
-  <section class="card">
-    <h2>1 · Reservoir activations <span class="pill">how it reacts to input</span></h2>
+  <section class="card" id="w1">
+    <h2>1 · Reservoir activations <span class="pill d3">3D</span>
+        <span class="pill">how it reacts to input</span></h2>
     <p class="desc">Each dot is a reservoir neuron and the lines are its
       connections; colour is the activation as the input drives the network, and
       node size grows with degree (so scale-free <b>hubs</b> stand out). Switch the
@@ -72,12 +130,17 @@
       responds to the input. A higher spectral radius lengthens the memory. Pick a
       structure and input, then press play.</p>
     <div class="grid2">
-      <canvas id="resCanvas" height="360"></canvas>
+      <div class="stage">
+        <canvas id="resCanvas" height="360"></canvas>
+        <span class="hint">drag to orbit · scroll to zoom</span>
+      </div>
       <canvas id="traceCanvas" height="360"></canvas>
     </div>
     <div class="controls">
       <button id="resPlay">▶ play</button>
       <button class="ghost" id="resReset">reset</button>
+      <label class="ctl">spin
+        <input type="checkbox" id="resSpin" checked style="width:auto;accent-color:var(--accent)"></label>
       <label class="ctl">structure
         <select id="resTopo">
           <option value="ring">ring</option>
@@ -111,9 +174,129 @@
     </div>
   </section>
 
+  <!-- WIDGET 5: 3D state space + echo state property -->
+  <section class="card" id="w5">
+    <h2>2 · State space <span class="pill d3">3D</span>
+        <span class="pill">the echo state property, made visible</span></h2>
+    <p class="desc">The reservoir has one dimension per neuron, so its state is
+      impossible to look at directly. Here it is projected onto its three
+      strongest principal components — a faithful 3D shadow of the real
+      trajectory. Two networks are driven with the <b>same input</b> from
+      <b>different starting states</b>: one from rest, one from a random state.
+      With ρ&nbsp;&lt;&nbsp;1 the two curves collapse onto each other and the
+      network <b>forgets where it started</b> — that is the echo state property,
+      and it is what makes the readout trainable. Push ρ past 1 and they never
+      meet: the reservoir keeps a permanent memory of its initial condition and
+      the task becomes unlearnable.</p>
+    <div class="stage">
+      <canvas id="psCanvas" height="420"></canvas>
+      <span class="hint">drag to orbit · scroll to zoom</span>
+    </div>
+    <div class="controls">
+      <button id="psPlay">▶ play</button>
+      <button class="ghost" id="psReroll">re-roll</button>
+      <label class="ctl">spectral radius ρ = <b id="psRhoV">0.90</b>
+        <input type="range" id="psRho" min="0.2" max="1.4" step="0.01" value="0.90"></label>
+      <label class="ctl">leaking rate a = <b id="psLeakV">0.45</b>
+        <input type="range" id="psLeak" min="0.05" max="1" step="0.05" value="0.45"></label>
+      <label class="ctl">input
+        <select id="psInput">
+          <option value="sine" selected>sine</option>
+          <option value="two_tone">two-tone</option>
+          <option value="chirp">chirp</option>
+          <option value="square">square</option>
+          <option value="noise">noise</option>
+        </select></label>
+    </div>
+    <div class="readout">
+      <div class="stat"><s>separation</s><b id="psSep">—</b></div>
+      <div class="stat"><s>echo state property</s><b id="psEsp">—</b></div>
+      <div class="stat"><s>variance kept by 3 PCs</s><b id="psVar">—</b></div>
+    </div>
+    <div class="note" id="psNote">Press play. Watch the two ribbons.</div>
+  </section>
+
+  <!-- WIDGET 6: Lorenz free-running prediction -->
+  <section class="card" id="w6">
+    <h2>3 · Chaos: predicting the Lorenz attractor <span class="pill d3">3D</span>
+        <span class="pill">free-running</span></h2>
+    <p class="desc">The reservoir is trained for one step-ahead prediction of the
+      Lorenz system, then <b>cut loose</b>: its own output is fed back as its next
+      input, so it runs with no further access to the truth. A good reservoir does
+      not merely track the trajectory — it reproduces the shape of the attractor,
+      both wings and all. Because the system is chaotic, the two paths must
+      eventually separate; the interesting quantity is <b>how long</b> they stay
+      together, and whether the prediction still looks like a Lorenz butterfly
+      long after it has stopped matching point for point.</p>
+    <div class="stage">
+      <canvas id="lzCanvas" height="440"></canvas>
+      <span class="hint">drag to orbit · scroll to zoom</span>
+    </div>
+    <div class="controls">
+      <button id="lzPlay">▶ run free</button>
+      <button class="ghost" id="lzRetrain">re-train</button>
+      <label class="ctl">neurons N = <b id="lzNV">240</b>
+        <input type="range" id="lzN" min="60" max="400" step="20" value="240"></label>
+      <label class="ctl">spectral radius ρ = <b id="lzRhoV">1.05</b>
+        <input type="range" id="lzRho" min="0.5" max="1.4" step="0.01" value="1.05"></label>
+      <label class="ctl">leaking rate a = <b id="lzLeakV">0.65</b>
+        <input type="range" id="lzLeak" min="0.1" max="1" step="0.05" value="0.65"></label>
+      <label class="ctl">ridge β = <b id="lzRegV">1e-6</b>
+        <input type="range" id="lzReg" min="-9" max="-1" step="1" value="-6"></label>
+    </div>
+    <div class="readout">
+      <div class="stat"><s>train NRMSE</s><b id="lzTrain">—</b></div>
+      <div class="stat"><s>steps tracked</s><b id="lzHorizon">—</b></div>
+      <div class="stat"><s>free-run step</s><b id="lzStep">—</b></div>
+      <div class="stat"><s>attractor kept</s><b id="lzShape">—</b></div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--muted)"></i>true Lorenz</span>
+      <span><i class="dot" style="background:var(--accent)"></i>reservoir, free-running</span>
+    </div>
+  </section>
+
+  <!-- WIDGET 7: hyper-parameter landscape -->
+  <section class="card" id="w7">
+    <h2>4 · The hyper-parameter landscape <span class="pill d3">3D</span>
+        <span class="pill">why ρ ≈ 1 wins</span></h2>
+    <p class="desc">Every point on this surface is a <b>fully trained reservoir</b>
+      — the grid is swept live, one network per cell, and the height is the
+      resulting test error. It shows the shape of the problem rather than a single
+      tuned number: a broad low valley near the edge of stability, a wall where the
+      dynamics stop echoing, and the interaction between the spectral radius and
+      the leaking rate that makes them impossible to tune independently. Lower is
+      better; the marker is the best cell found.</p>
+    <div class="stage">
+      <canvas id="hpCanvas" height="420"></canvas>
+      <span class="hint">drag to orbit · scroll to zoom</span>
+    </div>
+    <div class="controls">
+      <button id="hpRun">▶ sweep</button>
+      <button class="ghost" id="hpSpin">pause spin</button>
+      <label class="ctl">task
+        <select id="hpTask">
+          <option value="narma" selected>NARMA-10</option>
+          <option value="mg">Mackey-Glass</option>
+          <option value="delay">delay line (memory)</option>
+        </select></label>
+      <label class="ctl">grid = <b id="hpResV">14</b>×<b>14</b>
+        <input type="range" id="hpRes" min="6" max="20" step="2" value="14"></label>
+      <label class="ctl">neurons N = <b id="hpNV">40</b>
+        <input type="range" id="hpN" min="20" max="80" step="10" value="40"></label>
+      <progress id="hpProg" value="0" max="1"></progress>
+    </div>
+    <div class="readout">
+      <div class="stat"><s>best NRMSE</s><b id="hpBest">—</b></div>
+      <div class="stat"><s>at ρ</s><b id="hpBestRho">—</b></div>
+      <div class="stat"><s>at leak a</s><b id="hpBestLeak">—</b></div>
+      <div class="stat"><s>networks trained</s><b id="hpCount">0</b></div>
+    </div>
+  </section>
+
   <!-- WIDGET 2: strategies -->
-  <section class="card">
-    <h2>2 · Central vs Federated vs Local vs Ensemble <span class="pill">the strategies</span></h2>
+  <section class="card" id="w2">
+    <h2>5 · Central vs Federated vs Local vs Ensemble <span class="pill">the strategies</span></h2>
     <p class="desc">A forecasting task — pick <b>synthetic</b>, the <b>real TED
       spread</b> (a credit-risk series, 1986–2022) or chaotic <b>Mackey-Glass</b> —
       split across clients. <b>Federated</b> ridge pools the clients' summary
@@ -149,8 +332,77 @@
   </section>
 
   <!-- WIDGET 3: memory capacity -->
-  <section class="card">
-    <h2>3 · Short-term memory <span class="pill">how far back it remembers</span></h2>
+  <!-- WIDGET 8: differential privacy -->
+  <section class="card" id="w8">
+    <h2>6 · Differential privacy <span class="pill">what privacy costs</span></h2>
+    <p class="desc">Exact federated ridge already keeps raw data on the device —
+      clients send only the summed statistics <b>A</b> and <b>B</b>. Those second
+      moments still leak information about individual records, so each client can
+      clip its contribution and add calibrated Gaussian noise before sharing,
+      buying a formal <b>(ε, δ)</b> guarantee. Nothing is free: the noise is what
+      you pay. Drag ε from strict to loose and watch the forecast recover. The
+      curve on the right is the whole privacy–utility trade-off; the dashed line
+      is the no-privacy baseline and the grey line is a predictor that always
+      guesses the mean.</p>
+    <div class="grid2">
+      <canvas id="dpCanvas" height="320"></canvas>
+      <canvas id="dpCurve" height="320"></canvas>
+    </div>
+    <div class="controls">
+      <label class="ctl">privacy budget ε = <b id="dpEpsV">1.00</b>
+        <input type="range" id="dpEps" min="-1.3" max="1.7" step="0.05" value="0"></label>
+      <label class="ctl">clients K = <b id="dpKV">8</b>
+        <input type="range" id="dpK" min="2" max="24" step="1" value="8"></label>
+      <label class="ctl">clip C = <b id="dpClipV">3.0</b>
+        <input type="range" id="dpClip" min="0.5" max="8" step="0.5" value="3"></label>
+      <button class="ghost" id="dpReroll">re-draw noise</button>
+    </div>
+    <div class="readout">
+      <div class="stat"><s>private NRMSE</s><b id="dpErr">—</b></div>
+      <div class="stat"><s>exact NRMSE</s><b id="dpExact">—</b></div>
+      <div class="stat"><s>noise σ</s><b id="dpSigma">—</b></div>
+      <div class="stat"><s>usable?</s><b id="dpVerdict">—</b></div>
+    </div>
+  </section>
+
+  <!-- WIDGET 9: online / streaming learning -->
+  <section class="card" id="w9">
+    <h2>7 · Learning online <span class="pill">when the world changes</span></h2>
+    <p class="desc">The readout can be trained one sample at a time by recursive
+      least squares, without ever re-solving from scratch. That matters when the
+      data is not stationary. Halfway through the stream the <b>target rule
+      changes</b> (marked by the line). A readout that remembers everything equally
+      is dragged back by the old regime; one with a <b>forgetting factor</b> below 1
+      down-weights the past and re-locks onto the new rule. Turn forgetting down
+      and watch the error recover faster — at the cost of being jumpier when the
+      data is merely noisy.</p>
+    <canvas id="olCanvas" height="340"></canvas>
+    <div class="controls">
+      <button id="olPlay">▶ stream</button>
+      <button class="ghost" id="olReset">reset</button>
+      <label class="ctl">forgetting λ = <b id="olLamV">1.000</b>
+        <input type="range" id="olLam" min="0.9" max="1" step="0.002" value="1"></label>
+      <label class="ctl">speed
+        <select id="olSpeed">
+          <option value="1">1×</option>
+          <option value="3" selected>3×</option>
+          <option value="8">8×</option>
+        </select></label>
+    </div>
+    <div class="readout">
+      <div class="stat"><s>step</s><b id="olStep">0</b></div>
+      <div class="stat"><s>recent error</s><b id="olErr">—</b></div>
+      <div class="stat"><s>regime</s><b id="olRegime">A</b></div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--muted)"></i>target</span>
+      <span><i class="dot" style="background:var(--accent)"></i>online prediction</span>
+      <span><i class="dot" style="background:var(--red)"></i>error</span>
+    </div>
+  </section>
+
+  <section class="card" id="w3">
+    <h2>8 · Short-term memory <span class="pill">how far back it remembers</span></h2>
     <p class="desc">Can the reservoir reconstruct the input it saw <i>k</i> steps
       ago? Each bar is the recovery (R², 0–1) at delay <i>k</i>. Memory fades with
       delay, and reaches further as the spectral radius approaches 1.</p>
@@ -167,8 +419,8 @@
   </section>
 
   <!-- WIDGET 4: classification on real data -->
-  <section class="card">
-    <h2>4 · Speaker ID on Japanese Vowels <span class="pill">classification · real data</span></h2>
+  <section class="card" id="w4">
+    <h2>9 · Speaker ID on Japanese Vowels <span class="pill">classification · real data</span></h2>
     <p class="desc">A real UCI benchmark: classify which of <b>9 speakers</b> uttered a
       short Japanese vowel (12-dimensional cepstral frames). Each speaker is one
       federated <b>client</b> — an extreme label skew. <b>Centralized</b> and
@@ -381,6 +633,114 @@ function diverge(v){ // -1..1 -> color
   if(v>=0)return `rgb(${Math.round(60+v*195)},${Math.round(110-v*60)},${Math.round(110-v*70)})`;
   return `rgb(${Math.round(60+(-v)*20)},${Math.round(110+(-v)*80)},${Math.round(110+(-v)*120)})`;}
 
+/* ---------- minimal 3D: camera, perspective projection, orbit control ----------
+   Everything 3D on this page is hand-rolled: a yaw/pitch camera, a perspective
+   divide, and painter's-algorithm depth sorting. No WebGL and no libraries, so
+   the page still works offline and inside the JupyterLite/Pyodide build. */
+const REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+function makeCam(dist,f){return {yaw:0.7,pitch:0.42,dist:dist||3.2,f:f||0.62,spin:!REDUCED};}
+
+// Rotate a point by the camera, then project. Returns [sx,sy,depth,scale].
+function proj(p,cam,w,h){
+  const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  const X=p[0]*cy+p[2]*sy;
+  let Z=-p[0]*sy+p[2]*cy;
+  const Y=p[1]*cp-Z*sp;
+  Z=p[1]*sp+Z*cp;
+  const zc=Z+cam.dist;                       // camera sits at -dist on the view axis
+  const s=(cam.f*Math.min(w,h))/Math.max(0.06,zc);
+  return [w/2+X*s,h/2-Y*s,zc,s];
+}
+
+// Drag to orbit, wheel to zoom. `redraw` repaints widgets that are not animating.
+function orbit(cv,cam,redraw){
+  let down=false,lx=0,ly=0;
+  const paint=()=>{ if(redraw)requestAnimationFrame(redraw); };
+  cv.addEventListener('pointerdown',e=>{down=true;lx=e.clientX;ly=e.clientY;cam.spin=false;
+    try{cv.setPointerCapture(e.pointerId);}catch(_){}} );
+  cv.addEventListener('pointermove',e=>{ if(!down)return;
+    cam.yaw+=(e.clientX-lx)*0.0105; cam.pitch+=(e.clientY-ly)*0.0105;
+    cam.pitch=Math.max(-1.45,Math.min(1.45,cam.pitch));
+    lx=e.clientX; ly=e.clientY; paint();});
+  const up=()=>{down=false;};
+  cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up);
+  cv.addEventListener('wheel',e=>{e.preventDefault();
+    cam.dist=Math.max(1.3,Math.min(9,cam.dist*(1+(e.deltaY>0?1:-1)*0.09))); paint();},{passive:false});
+  return cam;
+}
+
+// Faint floor grid: the depth cue that makes the perspective readable.
+function drawFloor(ctx,cam,w,h,half,y){
+  const n=8,step=(half*2)/n; y=(y===undefined?-half*0.62:y);
+  ctx.strokeStyle=css('--grid'); ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let i=0;i<=n;i++){
+    const t=-half+i*step;
+    let a=proj([t,y,-half],cam,w,h), b=proj([t,y,half],cam,w,h);
+    if(a[2]>0.07&&b[2]>0.07){ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
+    a=proj([-half,y,t],cam,w,h); b=proj([half,y,t],cam,w,h);
+    if(a[2]>0.07&&b[2]>0.07){ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
+  }
+  ctx.stroke();
+}
+
+// Depth-cued stroke of a polyline given in world coordinates.
+function strokePath3(ctx,pts,cam,w,h,color,width,alpha){
+  ctx.strokeStyle=color; ctx.lineWidth=width||1.6;
+  ctx.globalAlpha=(alpha===undefined?1:alpha); ctx.beginPath();
+  let started=false;
+  for(let i=0;i<pts.length;i++){
+    const q=proj(pts[i],cam,w,h);
+    if(q[2]<=0.07){started=false;continue;}
+    if(started)ctx.lineTo(q[0],q[1]); else {ctx.moveTo(q[0],q[1]);started=true;}
+  }
+  ctx.stroke(); ctx.globalAlpha=1;
+}
+
+// 3-D node layouts, one per topology, in a roughly unit-radius box.
+function layoutNodes3D(kind,n,deg){
+  const P=[],GA=Math.PI*(3-Math.sqrt(5));
+  const hash=i=>(((i*2654435761)>>>0)%1000)/1000;
+  if(kind==='ring'||kind==='small_world'){
+    for(let i=0;i<n;i++){const a=2*Math.PI*i/n;
+      P.push([Math.cos(a),0.14*Math.sin(3*a),Math.sin(a)]);}
+  }else if(kind==='chain'){
+    for(let i=0;i<n;i++){const t=n>1?i/(n-1):0.5;
+      P.push([2*t-1,0.42*Math.sin(t*9),0.42*Math.cos(t*9)]);}
+  }else if(kind==='lattice'){
+    const side=Math.max(2,Math.round(Math.cbrt(n)));
+    for(let i=0;i<n;i++){const xi=i%side,yi=Math.floor(i/side)%side,zi=Math.floor(i/(side*side));
+      const d=side>1?side-1:1;
+      P.push([2*xi/d-1,2*yi/d-1,2*Math.min(zi,d)/d-1]);}
+  }else if(kind==='modular'){
+    const G=4,gs=Math.ceil(n/G);
+    const C=[[0.72,0.5,0.0],[-0.72,0.5,0.28],[0,-0.55,-0.72],[0,-0.35,0.78]];
+    for(let i=0;i<n;i++){const g=Math.min(G-1,Math.floor(i/gs)),c=C[g];
+      const a=2*Math.PI*(i%gs)/Math.max(1,gs),r=0.34*(0.5+0.5*hash(i));
+      P.push([c[0]+r*Math.cos(a),c[1]+r*Math.sin(a)*0.8,c[2]+r*Math.sin(a*1.7)]);}
+  }else if(kind==='star'){
+    const H=Math.max(1,Math.round(n/20));
+    for(let i=0;i<n;i++){
+      if(i<H){const a=2*Math.PI*i/Math.max(1,H);P.push([0.18*Math.cos(a),0,0.18*Math.sin(a)]);}
+      else{const k=i-H,y=1-2*(k+0.5)/Math.max(1,n-H),r=Math.sqrt(Math.max(0,1-y*y)),a=GA*k;
+        P.push([r*Math.cos(a),y,r*Math.sin(a)]);}}
+  }else if(kind==='scale_free'){
+    const maxd=Math.max(1,...deg);
+    const order=[...Array(n).keys()].sort((a,b)=>deg[b]-deg[a]);
+    order.forEach((idx,r)=>{                       // hubs pulled toward the core
+      const y=1-2*(r+0.5)/n,rad=Math.sqrt(Math.max(0,1-y*y)),a=GA*r;
+      const shrink=0.32+0.68*(1-deg[idx]/maxd);
+      P[idx]=[rad*Math.cos(a)*shrink,y*shrink,rad*Math.sin(a)*shrink];});
+  }else{                                            // random -> fibonacci sphere
+    for(let i=0;i<n;i++){const y=1-2*(i+0.5)/n,r=Math.sqrt(Math.max(0,1-y*y)),a=GA*i;
+      const j=0.82+0.18*hash(i);
+      P.push([r*Math.cos(a)*j,y*j,r*Math.sin(a)*j]);}
+  }
+  return P;
+}
+
 /* ---------- redraw registry ----------
    Each widget registers a function that repaints its cached state at the current
    canvas size. A ResizeObserver repaints when the canvas first gets a real size
@@ -451,7 +811,8 @@ function clsPredict(f,W,D,nc){let best=0,bv=-1e30;for(let c=0;c<nc;c++){let s=0;
 (function(){
   const cv=document.getElementById('resCanvas'), tc=document.getElementById('traceCanvas');
   if(!cv)return;
-  let res,x,t,playing=false,signal=[],raf=null,seed=12345,hist=[],pickIdx=[];
+  let res,x,t,playing=false,signal=[],raf=null,seed=12345,hist=[],pickIdx=[],pos3=[];
+  const cam=makeCam(3.1,0.60);
   const N=()=>+document.getElementById('resN').value;
   const TOPO=()=>document.getElementById('resTopo').value;
   function genSignal(kind,T){const s=new Array(T);let rw=0;for(let i=0;i<T;i++){
@@ -467,6 +828,7 @@ function clsPredict(f,W,D,nc){let best=0,bv=-1e30;for(let c=0;c<nc;c++){let s=0;
   function rebuild(){
     const rho=+document.getElementById('resRho').value, n=N();
     res=makeReservoirTopo(TOPO(),n,rho,seed); x=new Float64Array(n); t=0;
+    pos3=layoutNodes3D(TOPO(),n,res.deg);
     // sample up to 24 neurons to trace over time (one coloured line each)
     const K=Math.min(n,24); pickIdx=[];
     for(let j=0;j<K;j++)pickIdx.push(Math.floor(j*(n-1)/Math.max(1,K-1)));
@@ -476,20 +838,45 @@ function clsPredict(f,W,D,nc){let best=0,bv=-1e30;for(let c=0;c<nc;c++){let s=0;
   function draw(){
     const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
     const n=res.N, kind=TOPO();
-    const pos=layoutNodes(kind,n,res.deg,w,h);
-    // edges (faint, sub-sampled if very many)
-    const E=res.edges, stp=E.length>1400?Math.ceil(E.length/1400):1;
-    ctx.strokeStyle=css('--accent'); ctx.globalAlpha=0.35; ctx.lineWidth=1.1; ctx.beginPath();
-    for(let e=0;e<E.length;e+=stp){const a=pos[E[e][0]],b=pos[E[e][1]];
-      ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]);}
-    ctx.stroke(); ctx.globalAlpha=1;
-    // nodes: colour = activation, radius grows with degree
+    if(cam.spin && playing) cam.yaw+=0.0035;
+    drawFloor(ctx,cam,w,h,1.5);
+    // Project once, then paint back-to-front so nearer geometry occludes farther.
+    const P=pos3.map(p=>proj(p,cam,w,h));
+    const E=res.edges, stp=E.length>1200?Math.ceil(E.length/1200):1;
+    const segs=[];
+    for(let e=0;e<E.length;e+=stp){
+      const a=P[E[e][0]],b=P[E[e][1]];
+      if(!a||!b||a[2]<=0.07||b[2]<=0.07)continue;
+      segs.push([(a[2]+b[2])/2,a,b]);
+    }
+    segs.sort((p,q)=>q[0]-p[0]);
+    const acc=css('--accent');
+    for(const [d,a,b] of segs){
+      ctx.strokeStyle=acc; ctx.globalAlpha=Math.max(0.05,Math.min(0.42,0.5/d));
+      ctx.lineWidth=Math.max(0.5,1.5/d);
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
     const maxd=Math.max(1,...res.deg);
-    for(let i=0;i<n;i++){const a=x[i];const rad=3+6*Math.sqrt(res.deg[i]/maxd)+Math.min(8,Math.abs(a)*10);
-      ctx.beginPath();ctx.fillStyle=diverge(a);ctx.arc(pos[i][0],pos[i][1],rad,0,7);ctx.fill();}
+    const order=[...Array(n).keys()].filter(i=>P[i][2]>0.07).sort((i,j)=>P[j][2]-P[i][2]);
+    for(const i of order){
+      const a=x[i], q=P[i];
+      const base=(2.2+5.2*Math.sqrt(res.deg[i]/maxd)+Math.min(7,Math.abs(a)*9));
+      const rad=Math.max(1,base*q[3]/Math.min(w,h)*2.6);
+      // A glow on strongly active neurons reads as luminance, not just hue.
+      if(Math.abs(a)>0.45){
+        ctx.globalAlpha=Math.min(0.5,(Math.abs(a)-0.45)*0.8);
+        ctx.fillStyle=diverge(a); ctx.beginPath();
+        ctx.arc(q[0],q[1],rad*2.4,0,7); ctx.fill(); ctx.globalAlpha=1;
+      }
+      ctx.beginPath(); ctx.fillStyle=diverge(a);
+      ctx.globalAlpha=Math.max(0.35,Math.min(1,1.35/q[2]));
+      ctx.arc(q[0],q[1],rad,0,7); ctx.fill(); ctx.globalAlpha=1;
+    }
     const u=signal[t]||0;
     ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='center';
-    ctx.fillText(kind.replace('_','-')+'   ·   input '+u.toFixed(2)+'   ·   t='+t,w/2,h-8);
+    ctx.fillText(kind.replace('_','-')+'   ·   '+n+' neurons · '+res.edges.length+
+                 ' edges   ·   input '+u.toFixed(2)+'   ·   t='+t,w/2,h-8);
   }
   function drawTrace(){   // scrolling activation of each sampled neuron over time
     const {ctx,w,h}=fit(tc);ctx.clearRect(0,0,w,h);
@@ -528,6 +915,10 @@ function clsPredict(f,W,D,nc){let best=0,bv=-1e30;for(let c=0;c<nc;c++){let s=0;
   document.getElementById('resReset').addEventListener('click',()=>{rebuild();draw();drawTrace();});
   document.getElementById('resReroll').addEventListener('click',()=>{seed=(Math.random()*1e9)>>>0;rebuild();draw();drawTrace();});
   function redraw(){ if(res){ draw(); drawTrace(); } }
+  const spinBox=document.getElementById('resSpin');
+  if(spinBox){spinBox.checked=!REDUCED; cam.spin=!REDUCED;
+    spinBox.addEventListener('change',()=>{cam.spin=spinBox.checked;});}
+  orbit(cv,cam,()=>{ if(!playing) draw(); });
   rebuild(); onResize(cv,redraw); if(tc)onResize(tc,redraw); redraw();
 })();
 
@@ -727,6 +1118,680 @@ function clsPredict(f,W,D,nc){let best=0,bv=-1e30;for(let c=0;c<nc;c++){let s=0;
   document.getElementById('clsTally').textContent='central '+(accC*100).toFixed(0)+'% · federated '+(accF*100).toFixed(0)+'% · local '+(accL*100).toFixed(0)+'%';
   onResize(cv,()=>render(idx));
   render(0);
+})();
+
+/* ============ shared helpers for the widgets below ============ */
+
+// Principal components of a T×N state matrix, by power iteration with deflation.
+// N stays small here (<= 80), so the N×N covariance is cheap to form outright.
+function pca3(X,T,N){
+  const mean=new Float64Array(N);
+  for(let t=0;t<T;t++){const o=t*N;for(let i=0;i<N;i++)mean[i]+=X[o+i];}
+  for(let i=0;i<N;i++)mean[i]/=T;
+  const C=new Float64Array(N*N);
+  for(let t=0;t<T;t++){const o=t*N;
+    for(let i=0;i<N;i++){const a=X[o+i]-mean[i];const ri=i*N;
+      for(let j=i;j<N;j++)C[ri+j]+=a*(X[o+j]-mean[j]);}}
+  for(let i=0;i<N;i++)for(let j=0;j<i;j++)C[i*N+j]=C[j*N+i];
+  let trace=0; for(let i=0;i<N;i++)trace+=C[i*N+i];
+  const rng=mulberry32(9),comps=[],vals=[];
+  const norm=v=>{let n=0;for(let i=0;i<N;i++)n+=v[i]*v[i];return Math.sqrt(n);};
+  // Project out the components found so far. Done twice: once is not enough when
+  // the residual is near zero, because normalising a ~0 vector amplifies the
+  // rounding error and the "new" direction drifts back into the old span --
+  // which silently produced a third eigenvalue larger than the second.
+  const purify=v=>{
+    for(let pass=0;pass<2;pass++)
+      for(const p of comps){let d=0;for(let i=0;i<N;i++)d+=v[i]*p[i];
+        for(let i=0;i<N;i++)v[i]-=d*p[i];}
+    return v;
+  };
+  for(let c=0;c<3;c++){
+    let v=new Float64Array(N); for(let i=0;i<N;i++)v[i]=randn(rng);
+    purify(v); {const n=norm(v)||1;for(let i=0;i<N;i++)v[i]/=n;}
+    for(let it=0;it<90;it++){
+      const w=new Float64Array(N);
+      for(let i=0;i<N;i++){let s=0;const o=i*N;for(let j=0;j<N;j++)s+=C[o+j]*v[j];w[i]=s;}
+      purify(w);
+      const nn=norm(w);
+      if(!(nn>1e-11*(trace||1))){          // residual exhausted: nothing left here
+        for(let i=0;i<N;i++)w[i]=randn(rng);
+        purify(w); const n2=norm(w)||1; for(let i=0;i<N;i++)v[i]=w[i]/n2;
+        break;
+      }
+      for(let i=0;i<N;i++)v[i]=w[i]/nn;
+    }
+    purify(v); {const n=norm(v)||1;for(let i=0;i<N;i++)v[i]/=n;}
+    let lv=0; const w=new Float64Array(N);
+    for(let i=0;i<N;i++){let s=0;const o=i*N;for(let j=0;j<N;j++)s+=C[o+j]*v[j];w[i]=s;}
+    for(let i=0;i<N;i++)lv+=v[i]*w[i];
+    comps.push(v); vals.push(Math.max(0,lv));
+  }
+  return {comps,vals,mean,trace};
+}
+
+// Multi-input reservoir (the single-input engine above only carries one channel).
+function makeResMulti(N,din,rho,seed){
+  const rng=mulberry32(seed>>>0),W=new Float64Array(N*N),density=Math.min(0.2,6/N);
+  for(let i=0;i<N*N;i++) if(rng()<density) W[i]=2*rng()-1;
+  let v=new Float64Array(N); for(let i=0;i<N;i++)v[i]=randn(rng);
+  let nn=0; for(let i=0;i<N;i++)nn+=v[i]*v[i]; nn=Math.sqrt(nn)||1;
+  for(let i=0;i<N;i++)v[i]/=nn;
+  let sr=0;
+  for(let it=0;it<50;it++){
+    const w=new Float64Array(N);
+    for(let i=0;i<N;i++){let s=0;const o=i*N;for(let j=0;j<N;j++)s+=W[o+j]*v[j];w[i]=s;}
+    let m=0; for(let i=0;i<N;i++)m+=w[i]*w[i]; m=Math.sqrt(m);
+    if(m===0)break; sr=m; for(let i=0;i<N;i++)v[i]=w[i]/m;
+  }
+  if(sr>0){const g=rho/sr;for(let i=0;i<N*N;i++)W[i]*=g;}
+  const K=1+din,Win=new Float64Array(N*K);
+  for(let i=0;i<N*K;i++)Win[i]=(2*rng()-1)*0.9;
+  return {W,Win,N,din,K};
+}
+function stepMulti(res,x,u,a){
+  const {W,Win,N,K}=res,xn=new Float64Array(N);
+  for(let i=0;i<N;i++){
+    let pre=Win[i*K];                                  // bias column
+    for(let k=0;k<K-1;k++)pre+=Win[i*K+1+k]*u[k];
+    const o=i*N; for(let j=0;j<N;j++)pre+=W[o+j]*x[j];
+    xn[i]=(1-a)*x[i]+a*Math.tanh(pre);
+  }
+  x.set(xn);
+}
+// Solve one Gram against several right-hand sides (one per output channel).
+function ridgeMulti(A,B,D,m,beta){
+  const M=A.slice();
+  for(let i=0;i<D;i++){M[i*D+i]+=beta;for(let j=0;j<i;j++)M[i*D+j]=M[j*D+i];}
+  const out=[];
+  for(let c=0;c<m;c++){const b=new Float64Array(D);
+    for(let i=0;i<D;i++)b[i]=B[i*m+c]; out.push(solve(M,b,D));}
+  return out;
+}
+function lorenz(T,dt){
+  const s=10,r=28,b=8/3; let X=1,Y=1,Z=1.05; const out=new Float64Array(T*3);
+  for(let t=0;t<T+400;t++){
+    const dx=s*(Y-X),dy=X*(r-Z)-Y,dz=X*Y-b*Z;
+    X+=dt*dx; Y+=dt*dy; Z+=dt*dz;
+    if(t>=400){const o=(t-400)*3;out[o]=X;out[o+1]=Y;out[o+2]=Z;}
+  }
+  return out;
+}
+function heat(v){ // 0..1 -> cool->warm, used for the error surface
+  v=Math.max(0,Math.min(1,v));
+  const r=Math.round(40+215*Math.pow(v,0.85));
+  const g=Math.round(90+120*Math.sin(Math.PI*v)-40*v);
+  const bl=Math.round(190-160*v);
+  return 'rgb('+r+','+Math.max(0,g)+','+Math.max(0,bl)+')';
+}
+
+/* =================== WIDGET 5: 3D state space + echo state property ============ */
+(function(){
+  const cv=document.getElementById('psCanvas'); if(!cv)return;
+  const cam=makeCam(3.0,0.58);
+  let A=[],B=[],sep=[],head=0,playing=false,raf=null,seed=4242,varKept=0;
+  const T=680,N=56;
+  const val=id=>+document.getElementById(id).value;
+  function signal(kind,T){const s=new Float64Array(T);let rw=0;
+    for(let i=0;i<T;i++){
+      if(kind==='sine')s[i]=0.6*Math.sin(i*0.16);
+      else if(kind==='two_tone')s[i]=0.36*Math.sin(i*0.16)+0.28*Math.sin(i*0.058);
+      else if(kind==='chirp'){const p=i%520;s[i]=0.6*Math.sin(0.04*p+0.0007*p*p);}
+      else if(kind==='square')s[i]=(Math.floor(i/16)%2)?0.55:-0.55;
+      else s[i]=0.7*(Math.random()-0.5);}
+    return s;}
+  function simulate(){
+    const rho=val('psRho'),a=val('psLeak');
+    const res=makeReservoirTopo('small_world',N,rho,seed);
+    const u=signal(document.getElementById('psInput').value,T);
+    const rng=mulberry32(seed^0x9e37);
+    const x1=new Float64Array(N), x2=new Float64Array(N);
+    for(let i=0;i<N;i++)x2[i]=Math.tanh(randn(rng));      // second run starts elsewhere
+    const X=new Float64Array(2*T*N); sep=[];
+    for(let t=0;t<T;t++){
+      stepState(res,x1,u[t],a,1); stepState(res,x2,u[t],a,1);
+      let d=0; for(let i=0;i<N;i++){const q=x1[i]-x2[i];d+=q*q;}
+      sep.push(Math.sqrt(d));
+      const o1=t*N,o2=(T+t)*N;
+      for(let i=0;i<N;i++){X[o1+i]=x1[i];X[o2+i]=x2[i];}
+    }
+    const {comps,vals,mean,trace}=pca3(X,2*T,N);
+    varKept=trace>0?(vals[0]+vals[1]+vals[2])/trace:0;
+    const pr=(o)=>{const p=[0,0,0];
+      for(let c=0;c<3;c++){let s=0;for(let i=0;i<N;i++)s+=(X[o+i]-mean[i])*comps[c][i];p[c]=s;}
+      return p;};
+    A=[];B=[];
+    for(let t=0;t<T;t++){A.push(pr(t*N));B.push(pr((T+t)*N));}
+    let m=1e-9;
+    for(const P of [A,B])for(const p of P)m=Math.max(m,Math.abs(p[0]),Math.abs(p[1]),Math.abs(p[2]));
+    for(const P of [A,B])for(const p of P){p[0]/=m;p[1]/=m;p[2]/=m;}
+    head=0;
+    // Report the echo state property from the measured separation, not from rho.
+    const tail=sep.slice(-40).reduce((s,v)=>s+v,0)/40;
+    const start=Math.max(...sep.slice(0,20));
+    const esp=tail<start*0.02||tail<1e-3;
+    document.getElementById('psSep').textContent=tail<1e-4?tail.toExponential(1):tail.toFixed(4);
+    document.getElementById('psEsp').textContent=esp?'holds ✓':'broken ✗';
+    document.getElementById('psEsp').style.color=esp?css('--green'):css('--red');
+    document.getElementById('psVar').textContent=(100*varKept).toFixed(1)+'%';
+    document.getElementById('psNote').textContent = esp
+      ? 'The two ribbons merge: whatever state the reservoir started in has been washed out, so the readout sees one well-defined function of the input.'
+      : 'The ribbons stay apart: at this spectral radius the reservoir never forgets its initial state, so the same input can map to different states and no readout can be trained reliably.';
+  }
+  function draw(){
+    const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
+    if(cam.spin&&playing)cam.yaw+=0.003;
+    drawFloor(ctx,cam,w,h,1.25);
+    const n=Math.max(2,head);
+    strokePath3(ctx,A.slice(0,n),cam,w,h,css('--accent'),1.8,0.95);
+    strokePath3(ctx,B.slice(0,n),cam,w,h,css('--orange'),1.8,0.95);
+    // leading markers
+    for(const [P,col] of [[A,css('--accent')],[B,css('--orange')]]){
+      if(!P.length)continue;
+      const q=proj(P[Math.min(n,P.length)-1],cam,w,h);
+      if(q[2]>0.07){ctx.fillStyle=col;ctx.beginPath();ctx.arc(q[0],q[1],4.5,0,7);ctx.fill();
+        ctx.globalAlpha=.25;ctx.beginPath();ctx.arc(q[0],q[1],11,0,7);ctx.fill();ctx.globalAlpha=1;}
+    }
+    // separation inset (log scale) — the quantitative version of the picture
+    const iw=Math.min(210,w*0.34),ih=62,ix=w-iw-12,iy=12;
+    ctx.strokeStyle=css('--line');ctx.lineWidth=1;ctx.strokeRect(ix,iy,iw,ih);
+    ctx.fillStyle=css('--muted');ctx.font='10px system-ui';ctx.textAlign='left';
+    ctx.fillText('‖x₁−x₂‖  (log)',ix+6,iy+13);
+    if(sep.length){
+      const lo=-7,hi=Math.log10(Math.max(1e-6,Math.max(...sep)));
+      ctx.strokeStyle=css('--red');ctx.beginPath();
+      for(let i=0;i<n&&i<sep.length;i++){
+        const lv=Math.log10(Math.max(1e-7,sep[i]));
+        const xx=ix+iw*i/(sep.length-1), yy=iy+ih-4-(ih-18)*(lv-lo)/((hi-lo)||1);
+        i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);}
+      ctx.stroke();
+    }
+    ctx.fillStyle=css('--muted');ctx.textAlign='center';ctx.font='12px system-ui';
+    ctx.fillText('top-3 principal components of the reservoir state · '+
+      (100*varKept).toFixed(0)+'% of variance',w/2,h-8);
+  }
+  function loop(){ if(!playing)return; head=Math.min(T,head+4);
+    if(head>=T){playing=false;document.getElementById('psPlay').textContent='▶ replay';}
+    draw(); raf=requestAnimationFrame(loop);}
+  function play(p){playing=p;document.getElementById('psPlay').textContent=p?'❚❚ pause':'▶ play';
+    if(p){if(head>=T)head=0;cancelAnimationFrame(raf);loop();}}
+  const rebuild=()=>{simulate();head=T;draw();};
+  document.getElementById('psPlay').addEventListener('click',()=>play(!playing));
+  document.getElementById('psReroll').addEventListener('click',()=>{seed=(Math.random()*1e9)>>>0;rebuild();});
+  ['psRho','psLeak'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{
+    document.getElementById(id+'V').textContent=val(id).toFixed(2);rebuild();}));
+  document.getElementById('psInput').addEventListener('change',rebuild);
+  orbit(cv,cam,()=>{if(!playing)draw();});
+  onResize(cv,()=>{if(A.length)draw();});
+  rebuild();
+})();
+
+/* =================== WIDGET 6: Lorenz free-running prediction =================== */
+(function(){
+  const cv=document.getElementById('lzCanvas'); if(!cv)return;
+  const cam=makeCam(3.2,0.55);
+  const DT=0.02,TRAIN=1500,WASH=120,FREE=1400;
+  let truth=[],pred=[],res=null,Wout=null,mu=[0,0,0],sd=[1,1,1],
+      step=0,playing=false,raf=null,seed=99,horizon=0,trainErr=0;
+  const val=id=>+document.getElementById(id).value;
+  function train(){
+    const N=val('lzN'),rho=val('lzRho'),a=val('lzLeak'),beta=Math.pow(10,val('lzReg'));
+    const raw=lorenz(TRAIN+FREE+2,DT);
+    // z-score each coordinate so tanh sees a sensible range
+    mu=[0,0,0];sd=[1,1,1];
+    for(let c=0;c<3;c++){let m=0;for(let t=0;t<TRAIN;t++)m+=raw[t*3+c];m/=TRAIN;
+      let v=0;for(let t=0;t<TRAIN;t++){const d=raw[t*3+c]-m;v+=d*d;}
+      mu[c]=m;sd[c]=Math.sqrt(v/TRAIN)||1;}
+    const S=new Float64Array((TRAIN+FREE+2)*3);
+    for(let t=0;t<TRAIN+FREE+2;t++)for(let c=0;c<3;c++)S[t*3+c]=(raw[t*3+c]-mu[c])/sd[c];
+    res=makeResMulti(N,3,rho,seed);
+    const D=1+3+N,x=new Float64Array(N);
+    const A=new Float64Array(D*D),Bm=new Float64Array(D*3);
+    const z=new Float64Array(D);
+    for(let t=0;t<TRAIN;t++){
+      stepMulti(res,x,[S[t*3],S[t*3+1],S[t*3+2]],a);
+      z[0]=1;z[1]=S[t*3];z[2]=S[t*3+1];z[3]=S[t*3+2];
+      for(let i=0;i<N;i++)z[4+i]=x[i];
+      if(t<WASH)continue;
+      for(let i=0;i<D;i++){const zi=z[i];const ri=i*D;
+        for(let j=i;j<D;j++)A[ri+j]+=zi*z[j];
+        for(let c=0;c<3;c++)Bm[i*3+c]+=zi*S[(t+1)*3+c];}
+    }
+    Wout=ridgeMulti(A,Bm,D,3,beta);
+    // one-step training error, then cut the network loose
+    let se=0,vr=0;
+    const x2=new Float64Array(N);
+    for(let t=0;t<TRAIN;t++){
+      stepMulti(res,x2,[S[t*3],S[t*3+1],S[t*3+2]],a);
+      if(t<WASH)continue;
+      z[0]=1;z[1]=S[t*3];z[2]=S[t*3+1];z[3]=S[t*3+2];
+      for(let i=0;i<N;i++)z[4+i]=x2[i];
+      for(let c=0;c<3;c++){let s=0;for(let i=0;i<D;i++)s+=z[i]*Wout[c][i];
+        const e=s-S[(t+1)*3+c];se+=e*e;vr+=S[(t+1)*3+c]**2;}
+    }
+    trainErr=Math.sqrt(se/(vr||1e-9));
+    // free run: the reservoir's own output becomes its next input
+    truth=[];pred=[];
+    const xf=x2, cur=[S[TRAIN*3],S[TRAIN*3+1],S[TRAIN*3+2]];
+    horizon=0;let broke=false;
+    for(let k=0;k<FREE;k++){
+      const tt=[S[(TRAIN+k)*3],S[(TRAIN+k)*3+1],S[(TRAIN+k)*3+2]];
+      truth.push([tt[0],tt[1],tt[2]]); pred.push([cur[0],cur[1],cur[2]]);
+      let d=0;for(let c=0;c<3;c++)d+=(tt[c]-cur[c])**2;
+      if(!broke){ if(Math.sqrt(d)<1.2) horizon=k; else broke=true; }
+      stepMulti(res,xf,cur,a);
+      z[0]=1;z[1]=cur[0];z[2]=cur[1];z[3]=cur[2];
+      for(let i=0;i<N;i++)z[4+i]=xf[i];
+      for(let c=0;c<3;c++){let s=0;for(let i=0;i<D;i++)s+=z[i]*Wout[c][i];
+        cur[c]=Math.max(-6,Math.min(6,s));}                 // clamp: keep a blow-up drawable
+    }
+    // "attractor kept": does the free run still cover the same region of space?
+    const spread=p=>{const m=[0,0,0];for(const q of p)for(let c=0;c<3;c++)m[c]+=q[c]/p.length;
+      let s=0;for(const q of p)for(let c=0;c<3;c++)s+=(q[c]-m[c])**2;return Math.sqrt(s/p.length);};
+    const st=spread(truth),sp=spread(pred.slice(Math.floor(FREE*0.4)));
+    const ratio=st>0?sp/st:0;
+    const keeps=ratio>0.55&&ratio<1.8;
+    step=0;
+    document.getElementById('lzTrain').textContent=trainErr.toFixed(4);
+    document.getElementById('lzHorizon').textContent=horizon+' / '+FREE;
+    const el=document.getElementById('lzShape');
+    el.textContent=keeps?'yes ✓':'lost ✗';
+    el.style.color=keeps?css('--green'):css('--red');
+  }
+  function draw(){
+    const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
+    if(cam.spin&&playing)cam.yaw+=0.0028;
+    drawFloor(ctx,cam,w,h,1.6,-1.15);
+    const sc=0.42, to3=p=>[p[0]*sc,p[2]*sc-0.55,p[1]*sc];   // z is "up" for Lorenz
+    const n=Math.max(2,step);
+    strokePath3(ctx,truth.map(to3),cam,w,h,css('--muted'),1.1,0.35);
+    strokePath3(ctx,pred.slice(0,n).map(to3),cam,w,h,css('--accent'),1.9,0.95);
+    if(n>1&&n<=pred.length){
+      const q=proj(to3(pred[n-1]),cam,w,h);
+      if(q[2]>0.07){ctx.fillStyle=css('--accent');ctx.beginPath();ctx.arc(q[0],q[1],5,0,7);ctx.fill();
+        ctx.globalAlpha=.25;ctx.beginPath();ctx.arc(q[0],q[1],13,0,7);ctx.fill();ctx.globalAlpha=1;}
+      const qt=proj(to3(truth[n-1]),cam,w,h);
+      if(qt[2]>0.07){ctx.fillStyle=css('--muted');ctx.beginPath();ctx.arc(qt[0],qt[1],3.5,0,7);ctx.fill();}
+    }
+    document.getElementById('lzStep').textContent=n+' / '+FREE;
+    ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='center';
+    ctx.fillText(n<=horizon?'tracking the true trajectory':
+      'past the prediction horizon — chaos has taken over',w/2,h-8);
+  }
+  function loop(){ if(!playing)return; step=Math.min(pred.length,step+3);
+    if(step>=pred.length){playing=false;document.getElementById('lzPlay').textContent='▶ replay';}
+    draw(); raf=requestAnimationFrame(loop);}
+  function play(p){playing=p;document.getElementById('lzPlay').textContent=p?'❚❚ pause':'▶ run free';
+    if(p){if(step>=pred.length)step=0;cancelAnimationFrame(raf);loop();}}
+  function retrain(){
+    const btn=document.getElementById('lzRetrain'); const old=btn.textContent;
+    btn.textContent='training…'; btn.disabled=true;
+    setTimeout(()=>{ try{train();}finally{btn.textContent=old;btn.disabled=false;} step=pred.length; draw(); },16);
+  }
+  document.getElementById('lzPlay').addEventListener('click',()=>play(!playing));
+  document.getElementById('lzRetrain').addEventListener('click',()=>{seed=(Math.random()*1e9)>>>0;retrain();});
+  [['lzN',0],['lzRho',2],['lzLeak',2]].forEach(([id,dp])=>
+    document.getElementById(id).addEventListener('input',()=>{
+      document.getElementById(id+'V').textContent=val(id).toFixed(dp);}));
+  document.getElementById('lzReg').addEventListener('input',()=>{
+    document.getElementById('lzRegV').textContent='1e'+val('lzReg');});
+  ['lzN','lzRho','lzLeak','lzReg'].forEach(id=>
+    document.getElementById(id).addEventListener('change',retrain));
+  orbit(cv,cam,()=>{if(!playing)draw();});
+  onResize(cv,()=>{if(pred.length)draw();});
+  train(); step=pred.length; draw();
+})();
+
+/* =================== WIDGET 7: hyper-parameter landscape ======================= */
+(function(){
+  const cv=document.getElementById('hpCanvas'); if(!cv)return;
+  const cam=makeCam(3.0,0.60);
+  let G=14,grid=[],cell=0,running=false,raf=null,best=null,trained=0,spin=true;
+  const RHO=[0.1,1.5],LEAK=[0.05,1.0],T=460,WASH=60;
+  const val=id=>+document.getElementById(id).value;
+  function task(kind,T){
+    const u=new Float64Array(T),y=new Float64Array(T);
+    if(kind==='mg'){
+      const hist=[];for(let i=0;i<18;i++)hist.push(1.2+0.1*Math.sin(i));
+      let x=1.2;const buf=hist.slice();
+      for(let t=0;t<T+1;t++){const xt=buf[buf.length-17]||1.2;
+        x=x+0.1*(0.2*xt/(1+Math.pow(xt,10))-0.1*x);buf.push(x);
+        if(t<T){u[t]=(x-1)*1.4;} if(t>0&&t<=T)y[t-1]=(buf[buf.length-1]-1)*1.4;}
+    }else if(kind==='delay'){
+      for(let t=0;t<T;t++)u[t]=Math.random()-0.5;
+      for(let t=0;t<T;t++)y[t]=t>=8?u[t-8]:0;              // remember 8 steps back
+    }else{
+      const yy=new Float64Array(T+12);
+      for(let t=0;t<T;t++)u[t]=0.5*Math.random();
+      for(let t=10;t<T;t++){let s=0;for(let k=1;k<=10;k++)s+=yy[t-k];
+        yy[t]=0.3*yy[t-1]+0.05*yy[t-1]*s+1.5*u[t-10]*u[t-1]+0.1;}
+      for(let t=0;t<T;t++)y[t]=yy[t];
+    }
+    return {u,y};
+  }
+  let DATA=task('narma',T);
+  function evalCell(rho,a,N){
+    const res=makeReservoirTopo('small_world',N,rho,12345);
+    const {Z,T:tt,D}=harvest(res,DATA.u,a,1);
+    const half=Math.floor(tt*0.7);
+    const Ztr=Z.subarray(WASH*D,half*D),ytr=DATA.y.slice(WASH,half);
+    const w=ridge(Ztr,half-WASH,D,ytr,1e-6);
+    const p=predict(Z.subarray(half*D),tt-half,D,w);
+    const e=nrmse(DATA.y.slice(half),p,0,tt-half);
+    return (isFinite(e)&&e<10)?e:10;
+  }
+  function reset(){
+    G=val('hpRes'); grid=new Array(G*G).fill(null); cell=0; best=null; trained=0;
+    document.getElementById('hpCount').textContent='0';
+    document.getElementById('hpProg').value=0;
+  }
+  function sweepChunk(){
+    const N=val('hpN'),budget=Math.max(1,Math.round(90/N*6));
+    for(let k=0;k<budget&&cell<G*G;k++,cell++){
+      const i=cell%G,j=Math.floor(cell/G);
+      const rho=RHO[0]+(RHO[1]-RHO[0])*i/(G-1);
+      const a=LEAK[0]+(LEAK[1]-LEAK[0])*j/(G-1);
+      const e=evalCell(rho,a,N); grid[cell]=e; trained++;
+      if(!best||e<best.e)best={e,rho,a,i,j};
+    }
+    document.getElementById('hpCount').textContent=trained;
+    document.getElementById('hpProg').value=cell/(G*G);
+    if(best){
+      document.getElementById('hpBest').textContent=best.e.toFixed(4);
+      document.getElementById('hpBestRho').textContent=best.rho.toFixed(2);
+      document.getElementById('hpBestLeak').textContent=best.a.toFixed(2);
+    }
+  }
+  function draw(){
+    const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
+    if(spin&&!REDUCED)cam.yaw+=0.0022;
+    const done=grid.filter(v=>v!==null);
+    const lo=done.length?Math.min(...done):0, hi=done.length?Math.max(...done):1;
+    const nrm=v=>(v-lo)/((hi-lo)||1);
+    const P=(i,j,v)=>[ -1+2*i/(G-1), (v===null?0:0.9*(1-nrm(v))-0.45), -1+2*j/(G-1) ];
+    drawFloor(ctx,cam,w,h,1.25,-0.5);
+    const quads=[];
+    for(let j=0;j<G-1;j++)for(let i=0;i<G-1;i++){
+      const a=grid[j*G+i],b=grid[j*G+i+1],c=grid[(j+1)*G+i+1],d=grid[(j+1)*G+i];
+      if(a===null||b===null||c===null||d===null)continue;
+      const pts=[P(i,j,a),P(i+1,j,b),P(i+1,j+1,c),P(i,j+1,d)].map(p=>proj(p,cam,w,h));
+      if(pts.some(q=>q[2]<=0.07))continue;
+      quads.push([(pts[0][2]+pts[1][2]+pts[2][2]+pts[3][2])/4,pts,(a+b+c+d)/4]);
+    }
+    quads.sort((p,q)=>q[0]-p[0]);
+    for(const [d,pts,v] of quads){
+      ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let k=1;k<4;k++)ctx.lineTo(pts[k][0],pts[k][1]);
+      ctx.closePath();
+      ctx.fillStyle=heat(1-nrm(v)); ctx.globalAlpha=0.92; ctx.fill();
+      ctx.globalAlpha=0.5; ctx.strokeStyle='rgba(0,0,0,.22)'; ctx.lineWidth=.6; ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    if(best){
+      const q=proj(P(best.i,best.j,best.e),cam,w,h);
+      if(q[2]>0.07){
+        ctx.strokeStyle=css('--ink');ctx.lineWidth=2;ctx.beginPath();ctx.arc(q[0],q[1],7,0,7);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(q[0],q[1]);ctx.lineTo(q[0],q[1]-26);ctx.stroke();
+        ctx.fillStyle=css('--ink');ctx.font='11px system-ui';ctx.textAlign='center';
+        ctx.fillText('best',q[0],q[1]-30);
+      }
+    }
+    ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='center';
+    ctx.fillText('spectral radius ρ →   ·   ← leaking rate a   ·   height = 1/NRMSE  (taller is better)',
+                 w/2,h-8);
+  }
+  function loop(){
+    if(running){ sweepChunk(); if(cell>=G*G){running=false;
+      document.getElementById('hpRun').textContent='▶ sweep again';} }
+    draw();
+    if(running||spin||!REDUCED)raf=requestAnimationFrame(loop); }
+  document.getElementById('hpRun').addEventListener('click',()=>{
+    reset(); running=true; document.getElementById('hpRun').textContent='sweeping…';
+    cancelAnimationFrame(raf); loop();});
+  document.getElementById('hpSpin').addEventListener('click',e=>{
+    spin=!spin; e.target.textContent=spin?'pause spin':'resume spin';
+    if(spin){cancelAnimationFrame(raf);loop();}});
+  document.getElementById('hpRes').addEventListener('input',()=>{
+    document.getElementById('hpResV').textContent=val('hpRes');});
+  document.getElementById('hpN').addEventListener('input',()=>{
+    document.getElementById('hpNV').textContent=val('hpN');});
+  document.getElementById('hpTask').addEventListener('change',()=>{
+    DATA=task(document.getElementById('hpTask').value,T); reset(); draw();});
+  orbit(cv,cam,draw);
+  onResize(cv,draw);
+  reset(); running=true; loop();
+})();
+
+/* =================== WIDGET 8: differential privacy ============================ */
+(function(){
+  const cvA=document.getElementById('dpCanvas'),cvB=document.getElementById('dpCurve');
+  if(!cvA||!cvB)return;
+  const N=40,T=460,WASH=60;
+  let noiseSeed=7, cache=null;
+  const val=id=>+document.getElementById(id).value;
+  const EPS=()=>Math.pow(10,val('dpEps'));
+  // Analytic-Gaussian-style noise scale: shrinks with epsilon, grows with the clip.
+  const sigmaFor=(eps,C,K)=>C*C*Math.sqrt(2*Math.log(1.25/1e-5))/Math.max(1e-6,eps)/Math.sqrt(K);
+  function build(){
+    const u=new Float64Array(T),y=new Float64Array(T),yy=new Float64Array(T+12);
+    const rng=mulberry32(4242);
+    for(let t=0;t<T;t++)u[t]=0.5*rng();
+    for(let t=10;t<T;t++){let s=0;for(let k=1;k<=10;k++)s+=yy[t-k];
+      yy[t]=0.3*yy[t-1]+0.05*yy[t-1]*s+1.5*u[t-10]*u[t-1]+0.1;}
+    for(let t=0;t<T;t++)y[t]=yy[t];
+    const res=makeReservoirTopo('small_world',N,0.9,321);
+    const {Z,D}=harvest(res,u,0.5,1);
+    const half=Math.floor(T*0.7);
+    const A=new Float64Array(D*D),b=new Float64Array(D);
+    for(let t=WASH;t<half;t++){const o=t*D;
+      for(let i=0;i<D;i++){const zi=Z[o+i];b[i]+=zi*y[t];
+        for(let j=i;j<D;j++)A[i*D+j]+=zi*Z[o+j];}}
+    for(let i=0;i<D;i++)for(let j=0;j<i;j++)A[i*D+j]=A[j*D+i];
+    cache={Z,D,y,half,A,b,T};
+  }
+  function readout(eps,C,K,seed){
+    const {D,A,b}=cache;
+    const sg=sigmaFor(eps,C,K);
+    const rng=mulberry32(seed>>>0);
+    const An=A.slice(),bn=b.slice();
+    for(let i=0;i<D;i++){
+      bn[i]+=randn(rng)*sg;
+      for(let j=i;j<D;j++){const n=randn(rng)*sg;An[i*D+j]+=n;An[j*D+i]+=n;}
+    }
+    // noise-aware ridge, or the ill-conditioned solve amplifies it into nonsense
+    const beta=1e-6+2*sg*Math.sqrt(K*D);
+    return solveStats(An,bn,D,beta);
+  }
+  function errOf(w){
+    const {Z,D,y,half,T}=cache;
+    const p=predict(Z.subarray(half*D),T-half,D,w);
+    const e=nrmse(y.slice(half),p,0,T-half);
+    return isFinite(e)?e:99;
+  }
+  function draw(){
+    if(!cache)build();
+    const eps=EPS(),C=val('dpClip'),K=val('dpK');
+    const wDP=readout(eps,C,K,noiseSeed);
+    const wEx=solveStats(cache.A,cache.b,cache.D,1e-6);
+    const eDP=errOf(wDP),eEx=errOf(wEx);
+    const sg=sigmaFor(eps,C,K);
+    document.getElementById('dpEpsV').textContent=eps.toFixed(2);
+    document.getElementById('dpKV').textContent=K;
+    document.getElementById('dpClipV').textContent=C.toFixed(1);
+    document.getElementById('dpErr').textContent=eDP.toFixed(3);
+    document.getElementById('dpExact').textContent=eEx.toFixed(3);
+    document.getElementById('dpSigma').textContent=sg<0.01?sg.toExponential(1):sg.toFixed(3);
+    const v=document.getElementById('dpVerdict');
+    v.textContent=eDP<0.9?'yes ✓':(eDP<1.05?'marginal':'no ✗');
+    v.style.color=eDP<0.9?css('--green'):(eDP<1.05?css('--orange'):css('--red'));
+    // left: forecast
+    {const {ctx,w,h}=fit(cvA); ctx.clearRect(0,0,w,h);
+     const {Z,D,y,half,T}=cache;
+     const p=predict(Z.subarray(half*D),T-half,D,wDP);
+     const pe=predict(Z.subarray(half*D),T-half,D,wEx);
+     const n=T-half; let lo=1e9,hi=-1e9;
+     for(let t=0;t<n;t++){lo=Math.min(lo,y[half+t]);hi=Math.max(hi,y[half+t]);}
+     const pad=(hi-lo)*0.9||1; lo-=pad*0.35; hi+=pad*0.35;
+     const X=i=>10+(w-20)*i/(n-1), Y=v=>h-24-(h-44)*(v-lo)/((hi-lo)||1);
+     ctx.strokeStyle=css('--muted');ctx.lineWidth=1.4;ctx.beginPath();
+     for(let t=0;t<n;t++){const q=Y(y[half+t]);t?ctx.lineTo(X(t),q):ctx.moveTo(X(t),q);}ctx.stroke();
+     ctx.strokeStyle=css('--green');ctx.globalAlpha=.65;ctx.setLineDash([4,3]);ctx.beginPath();
+     for(let t=0;t<n;t++){const q=Y(pe[t]);t?ctx.lineTo(X(t),q):ctx.moveTo(X(t),q);}ctx.stroke();
+     ctx.setLineDash([]);ctx.globalAlpha=1;
+     ctx.strokeStyle=css('--accent');ctx.lineWidth=1.6;ctx.beginPath();
+     for(let t=0;t<n;t++){const q=Y(Math.max(lo,Math.min(hi,p[t])));t?ctx.lineTo(X(t),q):ctx.moveTo(X(t),q);}
+     ctx.stroke();
+     ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='left';
+     ctx.fillText('target',10,16);
+     ctx.fillStyle=css('--green');ctx.fillText('exact federated',60,16);
+     ctx.fillStyle=css('--accent');ctx.fillText('ε = '+eps.toFixed(2),168,16);
+     ctx.fillStyle=css('--muted');ctx.textAlign='center';
+     ctx.fillText('forecast under a differentially private readout',w/2,h-7);}
+    // right: privacy-utility curve
+    {const {ctx,w,h}=fit(cvB); ctx.clearRect(0,0,w,h);
+     const pts=[];
+     for(let k=0;k<=26;k++){const e=Math.pow(10,-1.3+(1.7+1.3)*k/26);
+       let acc=0;for(let r=0;r<3;r++)acc+=errOf(readout(e,C,K,noiseSeed+r*77));
+       pts.push([e,acc/3]);}
+     const lo=0,hi=Math.max(1.35,Math.min(3,Math.max(...pts.map(p=>p[1]))*1.05));
+     const X=e=>10+(w-24)*(Math.log10(e)+1.3)/3.0, Y=v=>h-26-(h-46)*(v-lo)/(hi-lo);
+     ctx.strokeStyle=css('--line');ctx.lineWidth=1;
+     ctx.beginPath();ctx.moveTo(10,Y(1));ctx.lineTo(w-14,Y(1));ctx.stroke();
+     ctx.fillStyle=css('--muted');ctx.font='11px system-ui';ctx.textAlign='left';
+     ctx.fillText('mean predictor (NRMSE 1)',12,Y(1)-5);
+     ctx.strokeStyle=css('--green');ctx.setLineDash([4,3]);ctx.beginPath();
+     ctx.moveTo(10,Y(eEx));ctx.lineTo(w-14,Y(eEx));ctx.stroke();ctx.setLineDash([]);
+     ctx.fillStyle=css('--green');ctx.fillText('no privacy',12,Y(eEx)-5);
+     ctx.strokeStyle=css('--accent');ctx.lineWidth=2;ctx.beginPath();
+     pts.forEach((p,i)=>{const q=Y(Math.min(hi,p[1]));i?ctx.lineTo(X(p[0]),q):ctx.moveTo(X(p[0]),q);});
+     ctx.stroke();
+     const q=[X(eps),Y(Math.min(hi,eDP))];
+     ctx.fillStyle=css('--accent');ctx.beginPath();ctx.arc(q[0],q[1],5,0,7);ctx.fill();
+     ctx.globalAlpha=.22;ctx.beginPath();ctx.arc(q[0],q[1],12,0,7);ctx.fill();ctx.globalAlpha=1;
+     ctx.fillStyle=css('--muted');ctx.textAlign='center';
+     ctx.fillText('← more private        privacy budget ε  (log)        less private →',w/2,h-7);}
+  }
+  ['dpEps','dpK','dpClip'].forEach(id=>
+    document.getElementById(id).addEventListener('input',draw));
+  document.getElementById('dpReroll').addEventListener('click',()=>{
+    noiseSeed=(Math.random()*1e9)>>>0;draw();});
+  onResize(cvA,()=>{if(cache)draw();}); onResize(cvB,()=>{if(cache)draw();});
+  draw();
+})();
+
+/* =================== WIDGET 9: online learning (RLS) =========================== */
+(function(){
+  const cv=document.getElementById('olCanvas'); if(!cv)return;
+  const N=28,D=2+N,SWITCH=520,TOTAL=1040;
+  let res,x,P,W,t,playing=false,raf=null,hist=[],errWin=[],u=null;
+  const val=id=>+document.getElementById(id).value;
+  function target(t,uu){                       // the rule changes halfway through
+    return t<SWITCH ? 0.8*uu[t-1]+0.4*uu[t-4] : -0.6*uu[t-2]+0.9*uu[t-7];
+  }
+  function reset(){
+    res=makeReservoirTopo('small_world',N,0.9,777); x=new Float64Array(N);
+    P=new Float64Array(D*D); for(let i=0;i<D;i++)P[i*D+i]=1e3;   // = I/ridge
+    W=new Float64Array(D); t=8; hist=[]; errWin=[];
+    const rng=mulberry32(31); u=new Float64Array(TOTAL+10);
+    for(let i=0;i<TOTAL+10;i++)u[i]=rng()-0.5;
+    document.getElementById('olStep').textContent='0';
+    document.getElementById('olErr').textContent='—';
+    document.getElementById('olRegime').textContent='A';
+  }
+  function step(){
+    if(t>=TOTAL)return false;
+    const lam=val('olLam');
+    stepState(res,x,u[t],0.6,1);
+    const z=new Float64Array(D); z[0]=1; z[1]=u[t];
+    for(let i=0;i<N;i++)z[2+i]=x[i];
+    let yhat=0; for(let i=0;i<D;i++)yhat+=z[i]*W[i];
+    const y=target(t,u), err=y-yhat;
+    // RLS: k = Pz/(lam + zPz); W += k*err; P = (P - k (Pz)^T)/lam
+    const Pz=new Float64Array(D); let zPz=0;
+    for(let i=0;i<D;i++){let s=0;const o=i*D;for(let j=0;j<D;j++)s+=P[o+j]*z[j];Pz[i]=s;}
+    for(let i=0;i<D;i++)zPz+=z[i]*Pz[i];
+    const den=lam+zPz;
+    for(let i=0;i<D;i++)W[i]+=(Pz[i]/den)*err;
+    for(let i=0;i<D;i++){const ki=Pz[i]/den;const o=i*D;
+      for(let j=0;j<D;j++)P[o+j]=(P[o+j]-ki*Pz[j])/lam;}
+    hist.push([y,yhat]); if(hist.length>TOTAL)hist.shift();
+    errWin.push(Math.abs(err)); if(errWin.length>40)errWin.shift();
+    t++; return true;
+  }
+  function draw(){
+    const {ctx,w,h}=fit(cv); ctx.clearRect(0,0,w,h);
+    const n=hist.length;
+    if(!n){ctx.fillStyle=css('--muted');ctx.font='12px system-ui';ctx.textAlign='center';
+      ctx.fillText('press ▶ stream',w/2,h/2);return;}
+    let lo=-1.4,hi=1.4;
+    const X=i=>10+(w-20)*i/Math.max(1,TOTAL-1), Y=v=>h*0.60-(h*0.42)*(v-0)/((hi-lo)/2);
+    // regime change marker
+    const sx=X(SWITCH-8);
+    ctx.strokeStyle=css('--orange');ctx.setLineDash([5,4]);ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(sx,14);ctx.lineTo(sx,h*0.78);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=css('--orange');ctx.font='11px system-ui';ctx.textAlign='left';
+    ctx.fillText('the rule changes here',sx+6,20);
+    ctx.strokeStyle=css('--muted');ctx.lineWidth=1.3;ctx.globalAlpha=.75;ctx.beginPath();
+    for(let i=0;i<n;i++){const q=Y(hist[i][0]);i?ctx.lineTo(X(i),q):ctx.moveTo(X(i),q);}ctx.stroke();
+    ctx.globalAlpha=1;
+    ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.beginPath();
+    for(let i=0;i<n;i++){const q=Y(Math.max(-2,Math.min(2,hist[i][1])));i?ctx.lineTo(X(i),q):ctx.moveTo(X(i),q);}
+    ctx.stroke();
+    // running error band along the bottom
+    const eb=h*0.80, eh=h*0.16;
+    ctx.strokeStyle=css('--red');ctx.lineWidth=1.3;ctx.beginPath();
+    let mx=1e-6; const es=[];
+    for(let i=0;i<n;i++){const e=Math.abs(hist[i][0]-hist[i][1]);es.push(e);mx=Math.max(mx,e);}
+    for(let i=0;i<n;i++){const q=eb+eh-eh*Math.min(1,es[i]/mx);i?ctx.lineTo(X(i),q):ctx.moveTo(X(i),q);}
+    ctx.stroke();
+    ctx.fillStyle=css('--muted');ctx.font='11px system-ui';ctx.textAlign='left';
+    ctx.fillText('|error|',12,eb+11);
+    const mean=errWin.length?errWin.reduce((s,v)=>s+v,0)/errWin.length:0;
+    document.getElementById('olStep').textContent=t;
+    document.getElementById('olErr').textContent=mean.toFixed(4);
+    document.getElementById('olRegime').textContent=t<SWITCH?'A':'B';
+  }
+  function loop(){ if(!playing)return;
+    const sp=+document.getElementById('olSpeed').value;
+    for(let k=0;k<sp;k++) if(!step()){playing=false;
+      document.getElementById('olPlay').textContent='▶ replay';break;}
+    draw(); raf=requestAnimationFrame(loop);}
+  function play(p){playing=p;document.getElementById('olPlay').textContent=p?'❚❚ pause':'▶ stream';
+    if(p){if(t>=TOTAL)reset();cancelAnimationFrame(raf);loop();}}
+  document.getElementById('olPlay').addEventListener('click',()=>play(!playing));
+  document.getElementById('olReset').addEventListener('click',()=>{reset();draw();});
+  document.getElementById('olLam').addEventListener('input',()=>{
+    document.getElementById('olLamV').textContent=val('olLam').toFixed(3);});
+  onResize(cv,()=>{if(hist.length)draw();});
+  reset(); draw();
+})();
+
+/* =================== page chrome: theme toggle + section nav =================== */
+(function(){
+  const btn=document.getElementById('themeBtn');
+  if(btn){
+    const root=document.documentElement;
+    const stored=(()=>{try{return localStorage.getItem('esnfed-theme');}catch(_){return null;}})();
+    if(stored)root.setAttribute('data-theme',stored);
+    btn.addEventListener('click',()=>{
+      const cur=root.getAttribute('data-theme')||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+      const next=cur==='dark'?'light':'dark';
+      root.setAttribute('data-theme',next);
+      try{localStorage.setItem('esnfed-theme',next);}catch(_){}
+      // canvases bake in the theme colours, so everything must repaint
+      __redraws.forEach(f=>{try{f();}catch(e){}});
+    });
+  }
+  const links=[...document.querySelectorAll('nav.jump a')];
+  const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  if('IntersectionObserver' in window && secs.length){
+    const io=new IntersectionObserver(es=>{
+      es.forEach(e=>{ if(!e.isIntersecting)return;
+        links.forEach(l=>l.classList.toggle('on',l.getAttribute('href')==='#'+e.target.id)); });
+    },{rootMargin:'-45% 0px -50% 0px'});
+    secs.forEach(s=>io.observe(s));
+  }
 })();
 
 window.addEventListener('resize',()=>{ __redraws.forEach(f=>{try{f();}catch(e){}}); });
