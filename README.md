@@ -212,7 +212,8 @@ loudly rather than return a plausible-looking wrong number:
   permutation invariance of reservoir node labelling, and the `(ε, δ)` guarantee
   of the analytic Gaussian mechanism.
 
-See [`CHANGELOG.md`](CHANGELOG.md) for the defects this uncovered, and the note on
+See [`CHANGELOG.md`](https://github.com/daibeal/esnfed/blob/main/CHANGELOG.md)
+for the defects this uncovered, and the note on
 what *exact* federated ridge means precisely (it is exact per partition; the
 readout itself is limited by the conditioning of the Gram matrix).
 
@@ -255,4 +256,4 @@ The bundled TED spread is sourced from the Federal Reserve Bank of St. Louis
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/daibeal/esnfed/blob/main/LICENSE).

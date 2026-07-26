@@ -102,6 +102,8 @@ Homepage = "https://daibeal.github.io/esnfed/"
 Documentation = "https://daibeal.github.io/esnfed/"
 Repository = "https://github.com/daibeal/esnfed"
 Issues = "https://github.com/daibeal/esnfed/issues"
+Changelog = "https://github.com/daibeal/esnfed/blob/main/CHANGELOG.md"
+Playground = "https://daibeal.github.io/esnfed/playground.html"
 
 # ---- Hatch build configuration ----------------------------------------------
 [tool.hatch.version]

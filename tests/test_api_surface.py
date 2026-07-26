@@ -115,6 +115,53 @@ class TestImportCost:
         assert out.returncode == 0, out.stderr
 
 
+class TestLongDescription:
+    """The README ships as the PyPI long description.
+
+    PyPI renders it at pypi.org, where a relative link like ``[x](CHANGELOG.md)``
+    silently resolves against pypi.org and 404s. Links must be absolute even
+    though the relative form looks correct on GitHub.
+    """
+
+    README = ROOT / "README.md"
+
+    def _links(self):
+        text = self.README.read_text(encoding="utf-8")
+        # [label](target) — ignore image embeds, which are handled separately.
+        return re.findall(r"(?<!!)\[[^\]]*\]\(([^)]+)\)", text)
+
+    def test_no_relative_links(self):
+        bad = [t for t in self._links()
+               if not t.startswith(("http://", "https://", "#", "mailto:"))]
+        assert not bad, (
+            f"relative links break on PyPI; make them absolute: {bad}"
+        )
+
+    def test_images_are_absolute(self):
+        text = self.README.read_text(encoding="utf-8")
+        imgs = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text)
+        bad = [t for t in imgs if not t.startswith(("http://", "https://"))]
+        assert not bad, f"relative image sources do not render on PyPI: {bad}"
+
+    def test_changelog_is_linked_and_exists(self):
+        assert "CHANGELOG.md" in self.README.read_text(encoding="utf-8")
+        assert (ROOT / "CHANGELOG.md").exists()
+
+    def test_declared_urls_are_absolute_and_well_formed(self):
+        text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        block = re.search(r"\[project\.urls\](.*?)(?:\n\[|\Z)", text, re.S)
+        assert block, "pyproject is missing a [project.urls] table"
+        urls = re.findall(r'^\s*[\w -]+\s*=\s*"([^"]+)"', block.group(1), re.M)
+        assert urls, "no project URLs declared"
+        assert all(u.startswith("https://") for u in urls), urls
+
+    def test_changelog_url_is_declared(self):
+        """PyPI shows this in the sidebar, which is where people look for it."""
+        text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        assert re.search(r'^\s*Changelog\s*=\s*"https://', text, re.M), \
+            "declare a Changelog URL in [project.urls]"
+
+
 class TestTyping:
 
     def test_py_typed_marker_ships(self):

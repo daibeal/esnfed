@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.1 — packaging metadata
+
+* **Fixed the links in the PyPI long description.** The README linked to
+  `CHANGELOG.md` and `LICENSE` relatively. That is correct on GitHub, but PyPI
+  renders the README at `pypi.org`, where a relative target resolves against
+  `pypi.org` and 404s. Both are now absolute. Because the long description is
+  baked into the uploaded artifact and a PyPI version can never be re-uploaded,
+  fixing this required a new release.
+* Declared `Changelog` and `Playground` in `[project.urls]`, so the changelog is
+  reachable from the PyPI sidebar rather than only from the rendered README.
+* Added tests that fail on any relative link or image in the README, on a
+  non-absolute project URL, and when no `Changelog` URL is declared.
+
+No library code changed; 1.7.0 and 1.7.1 are functionally identical.
+
 ## 1.7.0 — correctness review
 
 A full review of the library. The theme is **silent wrongness**: several
