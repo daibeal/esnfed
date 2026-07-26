@@ -53,24 +53,45 @@ class BottleneckProjection:
 
     def __init__(self, k: int, d: int, n_tokens: int = 1, *, seed: int = 0,
                  scale: float = 0.1):
+        if min(k, d, n_tokens) < 1:
+            raise ValueError(
+                f"k, d and n_tokens must all be >= 1, got {k}, {d}, {n_tokens}"
+            )
         rng = np.random.default_rng(seed)
         self.k = k
         self.d = d
         self.n_tokens = n_tokens
         self.P = scale * rng.standard_normal((n_tokens * d, k))
+        self._b: np.ndarray | None = None
+        self.grad_P: np.ndarray | None = None
 
     def forward(self, b: np.ndarray) -> np.ndarray:
         """b: (k,) -> soft prompt (n_tokens, d)."""
+        b = np.asarray(b, dtype=float).ravel()
+        if b.size != self.k:
+            raise ValueError(f"b must have {self.k} entries, got {b.size}")
         self._b = b
         return (self.P @ b).reshape(self.n_tokens, self.d)
 
     def backward(self, grad_prompt: np.ndarray):
         """Given dL/dp (n_tokens, d), return dL/db (k,) and store dL/dP."""
+        if self._b is None:
+            raise RuntimeError(
+                "backward() needs the bottleneck vector from a preceding "
+                "forward() call"
+            )
         g = np.asarray(grad_prompt, float).reshape(-1)  # (n_tokens*d,)
+        if g.size != self.P.shape[0]:
+            raise ValueError(
+                f"grad_prompt must hold {self.P.shape[0]} values "
+                f"(n_tokens*d), got {g.size}"
+            )
         self.grad_P = np.outer(g, self._b)  # (n_tokens*d, k)
         return self.P.T @ g  # dL/db, shape (k,)
 
     def step(self, lr: float):
+        if self.grad_P is None:
+            raise RuntimeError("step() needs a preceding backward() call")
         self.P -= lr * self.grad_P
 
     @property
@@ -97,7 +118,17 @@ class SurrogateLM:
 
     def loss_and_grad(self, prompt: np.ndarray, target: int):
         """prompt: (n_tokens, d) -> (loss, dL/dprompt with same shape)."""
-        p = np.atleast_2d(prompt)
+        p = np.atleast_2d(np.asarray(prompt, dtype=float))
+        if p.shape[1] != self.d:
+            raise ValueError(
+                f"prompt must have {self.d} embedding dimensions, got {p.shape}"
+            )
+        target = int(target)
+        if not 0 <= target < self.vocab_size:
+            raise ValueError(
+                f"target must be a token id in [0, {self.vocab_size - 1}], "
+                f"got {target}"
+            )
         h = p.mean(axis=0)  # mean-pool the prompt tokens -> (d,)
         logits = self.U @ h  # (V,)
         logits -= logits.max()
@@ -143,15 +174,23 @@ class EdgeClient:
     flops: int = field(default=0, init=False)
 
     def __post_init__(self):
+        if self.bottleneck_dim < 1:
+            raise ValueError(
+                f"bottleneck_dim must be >= 1, got {self.bottleneck_dim}"
+            )
         rng = np.random.default_rng(self.seed)
-        self.W_out = 0.1 * rng.standard_normal((self.bottleneck_dim, self.esn.readout_dim))
+        self.W_out = 0.1 * rng.standard_normal(
+            (self.bottleneck_dim, self.esn.readout_dim))
         self.projection = BottleneckProjection(
             self.bottleneck_dim, self.embed_dim, self.n_prompt_tokens, seed=self.seed
         )
+        self._z: np.ndarray | None = None
 
     # context (T, n_inputs) -> reservoir state -> bottleneck -> soft prompt
     def make_prompt(self, context: np.ndarray) -> np.ndarray:
-        Z = self.esn.harvest(np.atleast_2d(context).reshape(-1, self.esn.n_inputs))
+        Z = self.esn.harvest(context)
+        if Z.shape[0] == 0:
+            raise ValueError("context is empty; at least one timestep is required")
         z = Z[-1]  # last extended state summarises the context
         self._z = z
         self._b = self.W_out @ z  # bottleneck (k,)
@@ -165,6 +204,11 @@ class EdgeClient:
 
     def apply_server_gradient(self, grad_prompt: np.ndarray):
         """Back-propagate dL/dp through P and W_out and take an SGD step."""
+        if self._z is None:
+            raise RuntimeError(
+                "call make_prompt() before apply_server_gradient(): the update "
+                "needs the reservoir state that produced the prompt"
+            )
         self.bytes_down += np.asarray(grad_prompt).size * FLOAT_BYTES  # downlink
         grad_b = self.projection.backward(grad_prompt)  # (k,)
         grad_W = np.outer(grad_b, self._z)  # (k, readout_dim)

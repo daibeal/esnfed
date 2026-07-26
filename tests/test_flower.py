@@ -11,7 +11,7 @@ import pytest
 
 pytest.importorskip("flwr")
 
-from esnfed import federated  # noqa: E402
+from esnfed import federated
 
 _EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "flower_federated_ridge.py"
 _spec = importlib.util.spec_from_file_location("flower_federated_ridge", _EXAMPLE)

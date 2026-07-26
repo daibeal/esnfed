@@ -47,6 +47,21 @@ class Client:
     y: np.ndarray
     _Z: np.ndarray | None = field(default=None, init=False, repr=False)
 
+    def __post_init__(self) -> None:
+        n_u, n_y = len(self.u), len(np.atleast_1d(self.y))
+        if n_u != n_y:
+            raise ValueError(
+                f"client inputs and targets disagree on length: {n_u} vs {n_y}"
+            )
+        # A partition shorter than the washout used to yield a *negative*
+        # n_samples, which then became a negative FedAvg aggregation weight and
+        # quietly corrupted the global model.
+        if n_u <= self.esn.washout:
+            raise ValueError(
+                f"client holds {n_u} steps, which is not more than the ESN washout "
+                f"({self.esn.washout}); it would contribute no training samples"
+            )
+
     @property
     def n_samples(self) -> int:
         return len(self.u) - self.esn.washout
@@ -58,7 +73,14 @@ class Client:
         return self._Z[self.esn.washout :]
 
     def targets(self) -> np.ndarray:
-        y = np.atleast_2d(self.y).reshape(-1, self.esn.n_outputs)
+        y = np.asarray(self.y, dtype=np.float64)
+        n_out = self.esn.n_outputs
+        if y.ndim == 1 or (y.ndim == 2 and 1 in y.shape and n_out == 1):
+            y = y.reshape(-1, n_out)
+        elif y.ndim != 2 or y.shape[1] != n_out:
+            raise ValueError(
+                f"client targets must have shape (T, {n_out}), got {y.shape}"
+            )
         return y[self.esn.washout :]
 
     def invalidate(self) -> None:
@@ -66,9 +88,16 @@ class Client:
         self._Z = None
 
 
+def _require_clients(clients, what: str = "clients") -> None:
+    """Reject an empty cohort, which otherwise yields an all-zero readout."""
+    if not clients:
+        raise ValueError(f"no {what} to aggregate")
+
+
 # --------------------------------------------------------------- baselines
 def train_centralized(esn: EchoStateNetwork, clients: list[Client]) -> EchoStateNetwork:
     """Fit one readout on the concatenation of all client states (upper bound)."""
+    _require_clients(clients)
     A = np.zeros((esn.readout_dim, esn.readout_dim))
     B = np.zeros((esn.readout_dim, esn.n_outputs))
     for c in clients:
@@ -81,6 +110,7 @@ def train_centralized(esn: EchoStateNetwork, clients: list[Client]) -> EchoState
 
 def train_local(clients: list[Client]) -> list[EchoStateNetwork]:
     """Each client fits its own readout on its own data only."""
+    _require_clients(clients)
     for c in clients:
         Ak, Bk = ridge_statistics(c.states(), c.targets())
         c.esn.set_readout(solve_readout(Ak, Bk, c.esn.ridge))
@@ -95,6 +125,7 @@ def federated_ridge(clients: list[Client], esn: EchoStateNetwork) -> np.ndarray:
     are independent of dataset size and reveal no individual samples), never raw
     data. The result equals :func:`train_centralized`.
     """
+    _require_clients(clients)
     A = np.zeros((esn.readout_dim, esn.readout_dim))
     B = np.zeros((esn.readout_dim, esn.n_outputs))
     for c in clients:
@@ -118,6 +149,7 @@ def federated_ridge_dp(
     is solved with a ridge augmented by the spectral scale of the injected noise,
     so the readout stays well-posed at any budget.
     """
+    _require_clients(clients)
     A = np.zeros((esn.readout_dim, esn.readout_dim))
     B = np.zeros((esn.readout_dim, esn.n_outputs))
     base = np.random.default_rng(cfg.seed)
@@ -145,6 +177,7 @@ def federated_ridge_secure(
     readout equals :func:`federated_ridge` up to floating-point round-off
     (it is exact in the fixed-point/modular arithmetic of a real protocol).
     """
+    _require_clients(clients)
     As, Bs = [], []
     for c in clients:
         Ak, Bk = ridge_statistics(c.states(), c.targets())
@@ -195,9 +228,22 @@ def fedavg(
     Returns the final ``W_out`` and the list of global test NRMSE values, one per
     communication round.
     """
+    _require_clients(clients)
+    if rounds < 1:
+        raise ValueError(f"rounds must be >= 1, got {rounds}")
+    if local_epochs < 1:
+        raise ValueError(f"local_epochs must be >= 1, got {local_epochs}")
+    if not 0.0 < lr < 2.0:
+        raise ValueError(
+            f"lr is a normalised step and must lie in (0, 2), got {lr}"
+        )
     W = np.zeros((esn.readout_dim, esn.n_outputs))
     total = sum(c.n_samples for c in clients)
-    y_test = np.atleast_2d(y_test).reshape(-1, esn.n_outputs)
+    if total <= 0:
+        raise ValueError("clients contribute no post-washout samples")
+    u_test = esn._as_inputs(u_test)
+    y_test = esn._as_targets(y_test, u_test.shape[0])
+    esn._check_trainable(u_test.shape[0])
     Z_test = esn.harvest(u_test)[esn.washout :]
     y_eval = y_test[esn.washout :]
 
@@ -209,8 +255,11 @@ def fedavg(
                 W, c.states(), c.targets(), lr, esn.ridge, local_epochs
             )
             updates.append((c.n_samples, Wk))
-        # Weighted average (FedAvg aggregation).
-        W = sum((nk / total) * Wk for nk, Wk in updates)
+        # Weighted average (FedAvg aggregation). Accumulated explicitly rather
+        # than with sum(), whose empty-sequence result is the integer 0.
+        W = np.zeros_like(W)
+        for nk, Wk in updates:
+            W += (nk / total) * Wk
         history.append(nrmse(y_eval, Z_test @ W))
     return W, history
 
@@ -225,13 +274,32 @@ def ensemble_predict(
     No parameter averaging is performed, so the clients may have completely
     different reservoir structures and input weights.
     """
+    _require_clients(clients)
     preds = [c.esn.predict(u_test) for c in clients]
     P = np.stack(preds, axis=0)  # (n_clients, T, n_outputs)
     if weights is None:
         return P.mean(axis=0)
-    w = np.asarray(weights, float)
-    w = w / w.sum()
+    w = _normalised_weights(weights, len(clients))
     return np.tensordot(w, P, axes=(0, 0))
+
+
+def _normalised_weights(weights, n: int) -> np.ndarray:
+    """Validate mixing weights and normalise them to sum to one.
+
+    Weights that sum to zero used to divide through by zero and return an
+    all-``nan`` prediction with no error raised.
+    """
+    w = np.asarray(weights, dtype=float).ravel()
+    if w.size != n:
+        raise ValueError(f"expected {n} weights, got {w.size}")
+    if not np.all(np.isfinite(w)):
+        raise ValueError("weights must all be finite")
+    if np.any(w < 0):
+        raise ValueError("weights must be non-negative")
+    total = w.sum()
+    if not total > 0:
+        raise ValueError("weights must sum to a positive value")
+    return w / total
 
 
 # -------------------------------------------------------- structural alignment
@@ -266,6 +334,13 @@ def structural_alignment(
     reservoir distance (a measure of remaining heterogeneity).
     """
     esn_kwargs = dict(esn_kwargs or {})
+    if not partitions:
+        raise ValueError("no partitions given")
+    if len(local_reservoirs) != len(partitions):
+        raise ValueError(
+            f"got {len(local_reservoirs)} reservoirs for {len(partitions)} "
+            "partitions"
+        )
     n_in = partitions[0][0].shape[1]
     n_out = partitions[0][1].shape[1]
     y_test = np.atleast_2d(y_test).reshape(-1, n_out)
@@ -281,7 +356,10 @@ def structural_alignment(
             clients.append(Client(esn, u, y))
 
         # Heterogeneity measure: mean pairwise Frobenius distance of reservoirs.
-        mats = [c.esn.W for c in clients]
+        # Densify first: a sparse=True reservoir is a CSR matrix, which np.linalg
+        # cannot take a norm of.
+        mats = [np.asarray(m.toarray() if hasattr(m, "toarray") else m)
+                for m in (c.esn.W for c in clients)]
         dists = [
             np.linalg.norm(mats[i] - mats[j])
             for i in range(len(mats))
@@ -322,10 +400,13 @@ def make_shared_clients(
 ) -> tuple[list[Client], EchoStateNetwork]:
     """Build clients that all share one reservoir and input weights (homogeneous)."""
     esn_kwargs = dict(esn_kwargs or {})
+    if not partitions:
+        raise ValueError("no partitions given")
     n_in = partitions[0][0].shape[1]
     n_out = partitions[0][1].shape[1]
     clients = [
-        Client(EchoStateNetwork(n_in, n_out, reservoir, seed=input_seed, **esn_kwargs), u, y)
+        Client(EchoStateNetwork(n_in, n_out, reservoir, seed=input_seed,
+                                **esn_kwargs), u, y)
         for (u, y) in partitions
     ]
     reference = EchoStateNetwork(n_in, n_out, reservoir, seed=input_seed, **esn_kwargs)
@@ -340,6 +421,12 @@ def make_heterogeneous_clients(
 ) -> list[Client]:
     """Build clients each with its own reservoir and input weights (heterogeneous)."""
     esn_kwargs = dict(esn_kwargs or {})
+    if not partitions:
+        raise ValueError("no partitions given")
+    if len(reservoirs) != len(partitions):
+        raise ValueError(
+            f"got {len(reservoirs)} reservoirs for {len(partitions)} partitions"
+        )
     n_in = partitions[0][0].shape[1]
     n_out = partitions[0][1].shape[1]
     clients = []
@@ -363,8 +450,13 @@ def federated_prompt_average(prompt_clients, weights=None):
     n = len(prompt_clients)
     if n == 0:
         raise ValueError("no clients to aggregate")
-    w = np.ones(n) / n if weights is None else np.asarray(weights, float)
-    w = w / w.sum()
+    w = np.ones(n) / n if weights is None else _normalised_weights(weights, n)
+    shapes = {c.W_out.shape for c in prompt_clients}
+    if len(shapes) > 1:
+        raise ValueError(f"clients disagree on W_out shape: {sorted(shapes)}")
+    shapes = {c.projection.P.shape for c in prompt_clients}
+    if len(shapes) > 1:
+        raise ValueError(f"clients disagree on projection shape: {sorted(shapes)}")
     W_mean = sum(wi * c.W_out for wi, c in zip(w, prompt_clients))
     P_mean = sum(wi * c.projection.P for wi, c in zip(w, prompt_clients))
     for c in prompt_clients:

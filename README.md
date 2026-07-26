@@ -178,7 +178,7 @@ viz.save(viz.plot_spectrum(esn), "spectrum.html")   # or .png (needs kaleido)
 | `esnfed.deep` | `DeepEchoStateNetwork` (stacked reservoirs) |
 | `esnfed.topologies` | reservoir generators + `graph_metrics` |
 | `esnfed.datasets` | NARMA-10, Mackey-Glass, Lorenz; `from_array`, `load_csv`, `load_ted_spread`, `load_fred`, `load_fred_matrix`, `load_japanese_vowels`, `load_har` |
-| `esnfed.metrics` | `nrmse`, `rmse`, `mse`, `r2_score` |
+| `esnfed.metrics` | `nrmse`, `rmse`, `mse`, `mae`, `r2_score` |
 | `esnfed.federated` | `Client`, `federated_ridge`, `fedavg`, `ensemble_predict`, `structural_alignment`, `federated_ridge_dp`, `federated_ridge_secure` |
 | `esnfed.privacy` | differential privacy (`dp_statistics`, `gaussian_sigma`) + secure aggregation (`secure_sum`) |
 | `esnfed.streaming` | `StreamingRidge`, `RLSReadout` (incremental / online ridge) |
@@ -191,10 +191,30 @@ viz.save(viz.plot_spectrum(esn), "spectrum.html")   # or .png (needs kaleido)
 
 ```bash
 pip install -e ".[experiments,reservoirpy,flower,viz]"
-python -m pytest                    # 92 tests
+python -m pytest                    # 499 tests
 python experiments/run_all.py       # synthetic-benchmark figures and tables
 python experiments/exp6_finance.py  # federated counterparty-risk (TED spread)
 ```
+
+## Correctness
+
+The library is written for producing research results, so it is built to fail
+loudly rather than return a plausible-looking wrong number:
+
+- **Shapes are checked, not coerced.** A `(T,)` target compared against a `(T, 1)`
+  prediction, or a transposed `(n_inputs, T)` input, raises instead of silently
+  broadcasting or reinterleaving the data.
+- **Degenerate configurations are rejected** at construction — a washout longer
+  than the sequence, a non-positive leaking rate, a negative spectral radius, a
+  zero-sum weight vector.
+- **Numerical claims are tested as invariants**, not as golden numbers: exactness
+  of federated aggregation, streaming/batch equivalence, the echo state property,
+  permutation invariance of reservoir node labelling, and the `(ε, δ)` guarantee
+  of the analytic Gaussian mechanism.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the defects this uncovered, and the note on
+what *exact* federated ridge means precisely (it is exact per partition; the
+readout itself is limited by the conditioning of the Gram matrix).
 
 ## Data attribution
 

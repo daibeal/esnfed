@@ -12,27 +12,46 @@ topologies   Reservoir topology generators (random, small-world, scale-free,
              ring) + per-node leaking-rate and mixed-activation generators.
 datasets     Benchmark tasks (NARMA-10, Mackey-Glass, Lorenz) and real / external
              datasets (TED spread, multivariate FRED panels, Japanese Vowels, HAR).
-metrics      Error metrics (NRMSE, RMSE, MSE, R^2).
+metrics      Error metrics (NRMSE, RMSE, MSE, MAE, R^2).
 federated    Federated strategies (FedAvg, exact federated ridge, ensemble, alignment).
 classification  Sequence classification + its exact federated / ensemble variants.
 privacy      Differential privacy + secure aggregation for the federated statistics.
 streaming    Incremental / streaming ridge (accumulate A, B; RLS online updates).
+interop      Adapters for reservoirs designed in ReservoirPy.
+viz          Optional plotting (topology, spectrum, states, forecast).
+llm_orchestration
+             FedResPrompt: an ESN as a split-federated soft-prompt controller.
 """
 
-from .esn import EchoStateNetwork
-from .deep import DeepEchoStateNetwork
-from .metrics import nrmse, mse, rmse
 from . import (
-    topologies, datasets, federated, metrics, interop, viz,
-    classification, deep, llm_orchestration, privacy, streaming,
+    classification,
+    datasets,
+    deep,
+    esn,
+    federated,
+    interop,
+    llm_orchestration,
+    metrics,
+    privacy,
+    streaming,
+    topologies,
+    viz,
 )
+from .deep import DeepEchoStateNetwork
+from .esn import EchoStateNetwork, ridge_statistics, solve_readout
+from .metrics import mae, mse, nrmse, r2_score, rmse
 
 __all__ = [
     "EchoStateNetwork",
     "DeepEchoStateNetwork",
+    "esn",
+    "ridge_statistics",
+    "solve_readout",
     "nrmse",
     "mse",
     "rmse",
+    "mae",
+    "r2_score",
     "topologies",
     "datasets",
     "federated",
@@ -46,4 +65,4 @@ __all__ = [
     "streaming",
 ]
 
-__version__ = "1.6.2"
+__version__ = "1.7.0"

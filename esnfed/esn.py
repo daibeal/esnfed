@@ -34,12 +34,22 @@ available and all keep the public API and results unchanged:
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
+from typing import Any, Callable, Union
 
 import numpy as np
+import numpy.typing as npt
 
 # Reservoir size up to which Numba is auto-enabled (above this NumPy/BLAS wins).
 _NUMBA_AUTO_MAX_N = 1000
+
+#: A leaking rate: one value shared by every node, or one value per node.
+LeakingRate = Union[float, np.ndarray]
+
+#: A node nonlinearity: the name of a built-in (see :data:`ACTIVATIONS`), an
+#: array of such names for a mixed reservoir, or any element-wise callable.
+Activation = Union[str, np.ndarray, Callable[[np.ndarray], np.ndarray]]
 
 
 def _sigmoid(z):
@@ -47,7 +57,7 @@ def _sigmoid(z):
 
 
 # Available node nonlinearities, for homogeneous or per-node (mixed) reservoirs.
-ACTIVATIONS = {
+ACTIVATIONS: dict[str, Callable[[np.ndarray], np.ndarray]] = {
     "tanh": np.tanh,
     "sigmoid": _sigmoid,
     "relu": lambda z: np.maximum(0.0, z),
@@ -114,34 +124,42 @@ class EchoStateNetwork:
     reservoir: np.ndarray
     spectral_radius: float = 0.9
     input_scaling: float = 1.0
-    leaking_rate: object = 1.0
-    activation: object = "tanh"
+    leaking_rate: LeakingRate = 1.0
+    activation: Activation = "tanh"
     ridge: float = 1e-6
     washout: int = 100
     bias: float = 1.0
     seed: int | None = None
     input_weights: np.ndarray | None = None
-    dtype: object = np.float64
+    dtype: npt.DTypeLike = np.float64
     sparse: bool = False
     use_numba: bool | None = None
 
-    W: object = field(init=False, repr=False)
+    W: Any = field(init=False, repr=False)          # ndarray, or a SciPy CSR matrix
     W_in: np.ndarray = field(init=False, repr=False)
     W_out: np.ndarray | None = field(init=False, default=None, repr=False)
 
+    # Resolved in __post_init__: a scalar leaking rate or one value per node, and
+    # the element-wise nonlinearity (possibly a per-node dispatcher).
+    _a: float | np.ndarray = field(init=False, repr=False)
+    _activation_fn: Callable[[np.ndarray], np.ndarray] = field(init=False, repr=False)
+
     def __post_init__(self) -> None:
         dt = np.dtype(self.dtype)
-        res = self.reservoir
+        res: Any = self.reservoir
         if _is_scipy_sparse(res):
             res = res.toarray()
         W = np.asarray(res, dtype=dt).copy()
         if W.ndim != 2 or W.shape[0] != W.shape[1]:
             raise ValueError("reservoir must be a square 2-D matrix")
         self.n_reservoir = W.shape[0]
+        self._validate_hyperparameters()
 
-        # Rescale the reservoir to the requested spectral radius. Power iteration
-        # (matvec-based) is used for the sparse path to avoid a dense O(N^3) eig.
-        sr = _spectral_radius_iter(W) if self.sparse else _spectral_radius(W)
+        # Rescale the reservoir to the requested spectral radius. The sparse path
+        # uses a Krylov/ARPACK estimate, which -- unlike plain power iteration --
+        # is correct when the dominant eigenvalue is a complex conjugate pair (the
+        # common case for random reservoirs).
+        sr = _spectral_radius_sparse(W) if self.sparse else _spectral_radius(W)
         if sr > 0:
             W = (W * (self.spectral_radius / sr)).astype(dt)
 
@@ -174,9 +192,18 @@ class EchoStateNetwork:
             self._a = float(a)
             self._hetero_leak = False
         else:
+            if a.size not in (1, self.n_reservoir):
+                raise ValueError(
+                    f"leaking_rate array has {a.size} entries; expected a scalar "
+                    f"or one per reservoir node ({self.n_reservoir})"
+                )
             a = np.broadcast_to(a.ravel(), (self.n_reservoir,)).astype(dt)
             self._a = np.ascontiguousarray(a)
             self._hetero_leak = True
+        # A non-positive leaking rate freezes a neuron at its initial state, which
+        # is never intended and silently kills part of the reservoir.
+        if np.any(np.asarray(self._a) <= 0.0):
+            raise ValueError("leaking_rate must be > 0 (a = 1 recovers a standard ESN)")
 
         # Multi-type node nonlinearities: one activation, a per-node array of
         # activation names, or a callable.
@@ -193,6 +220,92 @@ class EchoStateNetwork:
         else:
             self._numba_enabled = base and bool(self.use_numba)
 
+    def _validate_hyperparameters(self) -> None:
+        """Reject hyper-parameters that would silently produce nonsense.
+
+        In particular a *negative* ``spectral_radius`` used to be accepted and
+        silently rescaled to its absolute value, and a negative ``washout`` would
+        slice from the end of the state matrix.
+        """
+        if self.n_inputs < 1:
+            raise ValueError(f"n_inputs must be >= 1, got {self.n_inputs}")
+        if self.n_outputs < 1:
+            raise ValueError(f"n_outputs must be >= 1, got {self.n_outputs}")
+        if not np.isfinite(self.spectral_radius) or self.spectral_radius < 0:
+            raise ValueError(
+                "spectral_radius must be a finite, non-negative number "
+                f"(got {self.spectral_radius}); the sign of W is not a free "
+                "parameter, rescaling only changes the magnitude"
+            )
+        if self.washout < 0:
+            raise ValueError(f"washout must be >= 0, got {self.washout}")
+        if not np.isfinite(self.ridge) or self.ridge < 0:
+            raise ValueError(f"ridge must be finite and >= 0, got {self.ridge}")
+        if not np.isfinite(self.bias):
+            raise ValueError(f"bias must be finite, got {self.bias}")
+
+    def _as_inputs(self, u) -> np.ndarray:
+        """Coerce ``u`` to a contiguous ``(T, n_inputs)`` matrix, or fail loudly.
+
+        A 2-D array whose second axis is *not* ``n_inputs`` used to be silently
+        ``reshape``-d, which for a transposed ``(n_inputs, T)`` input reinterleaves
+        the samples and produces plausible-looking but wrong states. Only genuinely
+        unambiguous layouts are accepted now.
+        """
+        u = np.asarray(u)
+        n = self.n_inputs
+        if u.ndim == 1 or (u.ndim == 2 and 1 in u.shape and n == 1):
+            # A flat stream (or a row/column vector for a single-input ESN).
+            if u.size % n:
+                raise ValueError(
+                    f"cannot interpret {u.size} values as a sequence of "
+                    f"{n}-dimensional inputs"
+                )
+            u = u.reshape(-1, n)
+        elif u.ndim != 2:
+            raise ValueError(f"inputs must be 1-D or 2-D, got {u.ndim}-D")
+        elif u.shape[1] != n:
+            hint = (f"; the array looks transposed -- pass u.T to read it as "
+                    f"{u.shape[1]} steps of {u.shape[0]} inputs"
+                    if u.shape[0] == n else "")
+            raise ValueError(
+                f"inputs must have shape (T, n_inputs) with n_inputs={n}, "
+                f"got {u.shape}{hint}"
+            )
+        return np.ascontiguousarray(u, dtype=self.W_in.dtype)
+
+    def _as_targets(self, y, n_steps: int) -> np.ndarray:
+        """Coerce ``y`` to ``(n_steps, n_outputs)``, or fail loudly."""
+        y = np.asarray(y, dtype=np.float64)
+        if y.ndim == 1 or (y.ndim == 2 and 1 in y.shape and self.n_outputs == 1):
+            y = y.reshape(-1, self.n_outputs)
+        elif y.ndim != 2:
+            raise ValueError(f"targets must be 1-D or 2-D, got {y.ndim}-D")
+        elif y.shape[1] != self.n_outputs:
+            raise ValueError(
+                f"targets must have shape (T, n_outputs) with "
+                f"n_outputs={self.n_outputs}, got {y.shape}"
+            )
+        if y.shape[0] != n_steps:
+            raise ValueError(
+                f"inputs and targets disagree on length: {n_steps} input steps "
+                f"vs {y.shape[0]} target steps"
+            )
+        return y
+
+    def _check_trainable(self, n_steps: int) -> None:
+        """Ensure there is post-washout data to fit on.
+
+        Without this a ``washout`` at least as long as the sequence yields empty
+        statistics, and the ridge solve returns an all-zero readout that predicts
+        zeros for ever, with no error anywhere.
+        """
+        if n_steps <= self.washout:
+            raise ValueError(
+                f"sequence of {n_steps} steps is too short for washout="
+                f"{self.washout}: no samples would remain to train on"
+            )
+
     def _build_activation(self):
         """Return ``(fn, is_heterogeneous)`` where ``fn(pre) -> activations``."""
         act = self.activation
@@ -206,7 +319,7 @@ class EchoStateNetwork:
         names = np.asarray(act)
         if names.shape != (self.n_reservoir,):
             raise ValueError("activation array must have length n_reservoir")
-        groups = []
+        groups: list[tuple[Callable[[np.ndarray], np.ndarray], np.ndarray]] = []
         for name in np.unique(names):
             key = str(name)
             if key not in ACTIVATIONS:
@@ -238,10 +351,13 @@ class EchoStateNetwork:
             Extended-state matrix of shape (T, 1 + n_inputs + n_reservoir),
             each row being ``[bias, u(t), x(t)]``.
         """
-        u = np.atleast_2d(u)
-        if u.shape[1] != self.n_inputs:
-            u = u.reshape(-1, self.n_inputs)
-        u = np.ascontiguousarray(u, dtype=self.W_in.dtype)
+        u = self._as_inputs(u)
+        if x0 is not None:
+            x0 = np.asarray(x0, dtype=self.W_in.dtype).ravel()
+            if x0.shape != (self.n_reservoir,):
+                raise ValueError(
+                    f"x0 must have shape ({self.n_reservoir},), got {x0.shape}"
+                )
 
         if self._numba_enabled and x0 is None:
             fn = _get_numba_harvest()
@@ -260,14 +376,13 @@ class EchoStateNetwork:
         return Z
 
     # ----------------------------------------------------------------- training
-    def fit(self, u: np.ndarray, y: np.ndarray) -> "EchoStateNetwork":
+    def fit(self, u: np.ndarray, y: np.ndarray) -> EchoStateNetwork:
         """Train the readout by ridge regression on a single sequence."""
-        y = np.atleast_2d(y)
-        if y.shape[0] != (np.atleast_2d(u).reshape(-1, self.n_inputs)).shape[0]:
-            y = y.reshape(-1, self.n_outputs)
+        u = self._as_inputs(u)
+        y = self._as_targets(y, u.shape[0])
+        self._check_trainable(u.shape[0])
         Z = self.harvest(u)
-        Zw, Yw = Z[self.washout :], y[self.washout :]
-        A, B = ridge_statistics(Zw, Yw)
+        A, B = ridge_statistics(Z[self.washout :], y[self.washout :])
         self.W_out = solve_readout(A, B, self.ridge)
         return self
 
@@ -287,12 +402,21 @@ class EchoStateNetwork:
         readout that pooled training would produce -- the basis of exact
         federated ridge regression.
         """
-        y = np.atleast_2d(y).reshape(-1, self.n_outputs)
+        u = self._as_inputs(u)
+        y = self._as_targets(y, u.shape[0])
+        self._check_trainable(u.shape[0])
         Z = self.harvest(u)
         return ridge_statistics(Z[self.washout :], y[self.washout :])
 
-    def set_readout(self, W_out: np.ndarray) -> "EchoStateNetwork":
-        self.W_out = np.asarray(W_out, dtype=float)
+    def set_readout(self, W_out: np.ndarray) -> EchoStateNetwork:
+        """Install a readout (e.g. one aggregated by the federated server)."""
+        W_out = np.asarray(W_out, dtype=float)
+        expected = (self.readout_dim, self.n_outputs)
+        if W_out.shape != expected:
+            raise ValueError(
+                f"W_out must have shape {expected}, got {W_out.shape}"
+            )
+        self.W_out = W_out
         return self
 
     @property
@@ -392,27 +516,90 @@ def _spectral_radius(W: np.ndarray) -> float:
     return float(np.max(np.abs(np.linalg.eigvals(W))))
 
 
-def _spectral_radius_iter(W, iters: int = 1000, seed: int = 0) -> float:
-    """Spectral radius by power iteration (Gelfand growth ratio); matvec-based,
-    so it works on dense or sparse matrices and avoids a dense O(N^3) eig."""
+# Below this size a dense eigendecomposition is fast enough to always prefer,
+# because it is exact; above it we fall back to iterative estimates.
+_DENSE_EIG_MAX_N = 2000
+
+
+def _spectral_radius_sparse(W) -> float:
+    """Spectral radius for the ``sparse=True`` path.
+
+    Plain power iteration is *not* usable here: a real reservoir matrix typically
+    has a complex-conjugate pair as its dominant eigenvalue, and the iterates then
+    rotate instead of converging, so the growth ratio oscillates around
+    ``|lambda_max|`` and lands several percent off. That silently gave sparse
+    reservoirs a different spectral radius from the one requested (0.9335 for a
+    target of 0.9).
+
+    Strategy, in order of preference:
+
+    1. a dense eigendecomposition while the reservoir is small enough for it to be
+       cheap -- this is *exact*, and covers the great majority of real uses;
+    2. ARPACK (``scipy.sparse.linalg.eigs``) with ``k=2`` so both members of a
+       complex conjugate pair fit in the requested invariant subspace;
+    3. a Gelfand-formula estimate ``||W^m||^(1/m)``, which is insensitive to the
+       rotation and converges to the spectral radius from below.
+    """
     n = W.shape[0]
-    if n == 0:
+    if n == 0 or not _any_nonzero(W):
         return 0.0
+    if n <= _DENSE_EIG_MAX_N:
+        dense = W.toarray() if _is_scipy_sparse(W) else np.asarray(W)
+        return _spectral_radius(dense.astype(np.float64))
+    try:
+        from scipy.sparse.linalg import eigs
+
+        # k=2 (not 1) so a dominant complex pair is resolved rather than
+        # approximated by a single real Ritz value; tol=0 asks for machine
+        # precision. ARPACK requires k < n - 1.
+        vals = eigs(W.astype(np.float64), k=2, which="LM",
+                    ncv=min(n - 1, 40), tol=0, return_eigenvectors=False)
+        return float(np.max(np.abs(vals)))
+    except Exception:
+        return _spectral_radius_gelfand(W)
+
+
+def _any_nonzero(W) -> bool:
+    """True if the (dense or sparse) matrix has a non-zero entry."""
+    if _is_scipy_sparse(W):
+        return W.nnz > 0 and bool(np.any(W.data))
+    return bool(np.any(W))
+
+
+def _spectral_radius_gelfand(W, iters: int = 200, seed: int = 0) -> float:
+    """Gelfand-formula spectral radius estimate ``lim ||W^m||^(1/m)``.
+
+    Iterating a *block* of vectors and rescaling by the geometric mean of the
+    per-step growth makes the estimate robust to the rotation induced by a complex
+    dominant pair, which is what breaks single-vector power iteration.
+    """
+    n = W.shape[0]
     rng = np.random.default_rng(seed)
-    v = rng.standard_normal(n)
-    nrm = np.linalg.norm(v)
-    if nrm == 0:
-        return 0.0
-    v /= nrm
-    est = 0.0
+    V = rng.standard_normal((n, min(4, n)))
+    V /= np.linalg.norm(V, axis=0, keepdims=True)
+    log_growth = 0.0
+    steps = 0
     for _ in range(iters):
-        w = W @ v
-        nrm = float(np.linalg.norm(w))
-        if nrm == 0:
+        V = W @ V
+        nrm = float(np.linalg.norm(V))
+        if nrm == 0.0:
             return 0.0
-        v = w / nrm
-        est = nrm
-    return est
+        log_growth += np.log(nrm)
+        V = V / nrm
+        steps += 1
+        # Renormalising by the Frobenius norm of the block leaves the average
+        # log-growth per step as the estimate of log(spectral radius).
+    return float(np.exp(log_growth / steps)) if steps else 0.0
+
+
+# Retained for backwards compatibility (the old, less accurate estimator).
+def _spectral_radius_iter(W, iters: int = 1000, seed: int = 0) -> float:
+    """Deprecated alias of :func:`_spectral_radius_sparse`.
+
+    The original single-vector power iteration is inaccurate for reservoirs with a
+    complex dominant eigenvalue pair; it now delegates to the accurate estimator.
+    """
+    return _spectral_radius_sparse(W)
 
 
 def ridge_statistics(Z: np.ndarray, Y: np.ndarray):
@@ -428,6 +615,40 @@ def ridge_statistics(Z: np.ndarray, Y: np.ndarray):
 
 
 def solve_readout(A: np.ndarray, B: np.ndarray, ridge: float) -> np.ndarray:
-    """Solve ``(A + ridge * I) W_out = B`` for the readout weights."""
-    d = A.shape[0]
-    return np.linalg.solve(A + ridge * np.eye(d), B)
+    """Solve ``(A + ridge * I) W_out = B`` for the readout weights.
+
+    ``A`` is a Gram matrix, hence symmetric positive semi-definite, so the system
+    is solved via a Cholesky factorisation of the regularised matrix. With
+    ``ridge = 0`` (or a rank-deficient ``A``) that system can be singular; rather
+    than propagating a bare ``LinAlgError`` we fall back to the minimum-norm
+    least-squares solution, which is the natural limit of ridge regression as the
+    regularisation vanishes.
+    """
+    A = np.asarray(A, dtype=np.float64)
+    B = np.asarray(B, dtype=np.float64)
+    if A.ndim != 2 or A.shape[0] != A.shape[1]:
+        raise ValueError(f"A must be a square matrix, got shape {A.shape}")
+    if B.shape[0] != A.shape[0]:
+        raise ValueError(
+            f"A and B disagree: A is {A.shape}, B is {B.shape}"
+        )
+    if ridge < 0:
+        raise ValueError(f"ridge must be >= 0, got {ridge}")
+    G = A + ridge * np.eye(A.shape[0])
+    try:
+        # Symmetric-positive-definite solve: ~2x faster than a general LU and it
+        # fails cleanly (rather than silently amplifying error) when G is singular.
+        chol = np.linalg.cholesky(G)
+        return np.linalg.solve(chol.T, np.linalg.solve(chol, B))
+    except np.linalg.LinAlgError:
+        pass
+    try:
+        return np.linalg.solve(G, B)
+    except np.linalg.LinAlgError:
+        warnings.warn(
+            "the regularised Gram matrix is singular; falling back to the "
+            "minimum-norm least-squares readout. Increase `ridge` for a "
+            "well-posed solve.",
+            stacklevel=2,
+        )
+        return np.linalg.lstsq(G, B, rcond=None)[0]

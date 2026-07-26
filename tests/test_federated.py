@@ -7,7 +7,7 @@ foundation of the privacy-preserving baseline.
 import numpy as np
 import pytest
 
-from esnfed import EchoStateNetwork, datasets, federated, metrics, topologies
+from esnfed import datasets, federated, metrics, topologies
 
 
 @pytest.fixture

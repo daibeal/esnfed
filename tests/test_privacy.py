@@ -53,7 +53,7 @@ def test_analytic_gaussian_satisfies_dp_condition():
     Phi = lambda t: 0.5 * (1.0 + math.erf(t / math.sqrt(2.0)))
     s = sigma / sens
     B = Phi(1.0 / (2 * s) - eps * s) - math.exp(eps) * Phi(-1.0 / (2 * s) - eps * s)
-    assert B <= delta + 1e-9
+    assert delta + 1e-9 >= B
 
 
 def test_clip_rows_bounds_norm():

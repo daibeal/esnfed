@@ -8,6 +8,14 @@ build/
 .venv/
 venv/
 
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
 # Experiment outputs (regenerable)
 figures/
 tables/

@@ -36,11 +36,22 @@ def _check_backend(backend: str) -> None:
 
 
 def _reservoir_matrix(obj) -> np.ndarray:
-    """Accept an EchoStateNetwork or a raw weight matrix and return ``W``."""
+    """Accept an EchoStateNetwork or a raw weight matrix and return a dense ``W``.
+
+    An ESN built with ``sparse=True`` stores ``W`` as a SciPy CSR matrix, which
+    ``np.asarray`` wraps in a 0-d object array instead of converting -- every plot
+    then failed with "setting an array element with a sequence". Sparse matrices
+    are densified explicitly.
+    """
     W = getattr(obj, "W", None)
     if W is None:
         W = obj
-    return np.asarray(W, dtype=float)
+    if hasattr(W, "toarray"):        # SciPy sparse matrix / array
+        W = W.toarray()
+    W = np.asarray(W, dtype=float)
+    if W.ndim != 2 or W.shape[0] != W.shape[1]:
+        raise ValueError(f"expected a square reservoir matrix, got shape {W.shape}")
+    return W
 
 
 def _plotly():
@@ -192,9 +203,14 @@ def plot_states(esn, u, *, n_neurons: int = 8, max_steps: int = 300,
                 title: str | None = None):
     """Plot a sample of reservoir activations over time."""
     _check_backend(backend)
-    u = np.atleast_2d(np.asarray(u, dtype=float))
-    if u.shape[0] < u.shape[1]:
-        u = u.reshape(-1, esn.n_inputs)
+    if n_neurons < 1:
+        raise ValueError(f"n_neurons must be >= 1, got {n_neurons}")
+    if max_steps < 1:
+        raise ValueError(f"max_steps must be >= 1, got {max_steps}")
+    # Let the ESN own the input-layout rules, so an ambiguous array is rejected
+    # here exactly as it would be in fit()/predict() rather than being reshaped.
+    u = esn._as_inputs(u) if hasattr(esn, "_as_inputs") else \
+        np.asarray(u, dtype=float).reshape(-1, esn.n_inputs)
     Z = esn.harvest(u[:max_steps])
     states = Z[:, 1 + esn.n_inputs:]
     rng = np.random.default_rng(seed)

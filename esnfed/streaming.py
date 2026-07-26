@@ -23,6 +23,41 @@ import numpy as np
 from .esn import ridge_statistics, solve_readout
 
 
+def _check_dims(readout_dim: int, n_outputs: int) -> None:
+    if readout_dim < 1:
+        raise ValueError(f"readout_dim must be >= 1, got {readout_dim}")
+    if n_outputs < 1:
+        raise ValueError(f"n_outputs must be >= 1, got {n_outputs}")
+
+
+def _as_batch(Z, Y, readout_dim: int, n_outputs: int):
+    """Validate a ``(Z, Y)`` batch against the accumulator's dimensions.
+
+    Reshaping ``Y`` blindly to fit ``Z`` used to hide genuine mismatches (a
+    wrong-length target block would be silently folded into the wrong number of
+    outputs), so the layout is checked instead.
+    """
+    Z = np.asarray(Z, dtype=np.float64)
+    if Z.ndim == 1:
+        Z = Z.reshape(-1, readout_dim) if Z.size != readout_dim else Z.reshape(1, -1)
+    if Z.ndim != 2 or Z.shape[1] != readout_dim:
+        raise ValueError(
+            f"Z must have shape (n_samples, {readout_dim}), got {Z.shape}"
+        )
+    Y = np.asarray(Y, dtype=np.float64)
+    if Y.ndim == 1 or (Y.ndim == 2 and 1 in Y.shape and n_outputs == 1):
+        Y = Y.reshape(-1, n_outputs)
+    if Y.ndim != 2 or Y.shape[1] != n_outputs:
+        raise ValueError(
+            f"Y must have shape (n_samples, {n_outputs}), got {Y.shape}"
+        )
+    if Y.shape[0] != Z.shape[0]:
+        raise ValueError(
+            f"Z and Y disagree on sample count: {Z.shape[0]} vs {Y.shape[0]}"
+        )
+    return Z, Y
+
+
 @dataclass
 class StreamingRidge:
     """Accumulate ridge sufficient statistics incrementally; solve on demand.
@@ -39,23 +74,29 @@ class StreamingRidge:
     n_seen: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
+        _check_dims(self.readout_dim, self.n_outputs)
+        if self.ridge < 0:
+            raise ValueError(f"ridge must be >= 0, got {self.ridge}")
         self.A = np.zeros((self.readout_dim, self.readout_dim))
         self.B = np.zeros((self.readout_dim, self.n_outputs))
 
-    def update(self, Z, Y) -> "StreamingRidge":
+    def update(self, Z, Y) -> StreamingRidge:
         """Accumulate a new batch of extended states ``Z`` and targets ``Y``."""
-        Z = np.asarray(Z, dtype=np.float64)
-        Y = np.atleast_2d(np.asarray(Y, dtype=np.float64))
-        if Y.shape[0] != Z.shape[0]:
-            Y = Y.reshape(Z.shape[0], -1)
+        Z, Y = _as_batch(Z, Y, self.readout_dim, self.n_outputs)
         Ak, Bk = ridge_statistics(Z, Y)
         self.A += Ak
         self.B += Bk
         self.n_seen += Z.shape[0]
         return self
 
-    def merge(self, other: "StreamingRidge") -> "StreamingRidge":
+    def merge(self, other: StreamingRidge) -> StreamingRidge:
         """Add another accumulator's statistics (exactly the federated sum)."""
+        if (self.readout_dim, self.n_outputs) != (other.readout_dim, other.n_outputs):
+            raise ValueError(
+                f"cannot merge accumulators of different shape: "
+                f"({self.readout_dim}, {self.n_outputs}) vs "
+                f"({other.readout_dim}, {other.n_outputs})"
+            )
         self.A += other.A
         self.B += other.B
         self.n_seen += other.n_seen
@@ -87,13 +128,33 @@ class RLSReadout:
     n_seen: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
+        _check_dims(self.readout_dim, self.n_outputs)
+        # P is initialised as I / ridge, so a zero ridge yields an infinite
+        # (then NaN) inverse Gram and every subsequent update is garbage.
+        if not np.isfinite(self.ridge) or self.ridge <= 0:
+            raise ValueError(
+                f"ridge must be finite and > 0 for RLS (it seeds the inverse Gram "
+                f"as I/ridge), got {self.ridge}"
+            )
+        if not 0.0 < self.forgetting <= 1.0:
+            raise ValueError(
+                f"forgetting must be in (0, 1], got {self.forgetting}"
+            )
         self.P = np.eye(self.readout_dim) / self.ridge
         self.W = np.zeros((self.readout_dim, self.n_outputs))
 
-    def update(self, z, y) -> "RLSReadout":
+    def update(self, z, y) -> RLSReadout:
         """One rank-1 update from a single record ``(z, y)``."""
         z = np.asarray(z, dtype=np.float64).reshape(-1)
         y = np.asarray(y, dtype=np.float64).reshape(-1)
+        if z.size != self.readout_dim:
+            raise ValueError(
+                f"z must have {self.readout_dim} entries, got {z.size}"
+            )
+        if y.size != self.n_outputs:
+            raise ValueError(
+                f"y must have {self.n_outputs} entries, got {y.size}"
+            )
         lam = self.forgetting
         Pz = self.P @ z
         denom = lam + float(z @ Pz)
@@ -104,12 +165,9 @@ class RLSReadout:
         self.n_seen += 1
         return self
 
-    def update_batch(self, Z, Y) -> "RLSReadout":
+    def update_batch(self, Z, Y) -> RLSReadout:
         """Apply :meth:`update` to each row of ``(Z, Y)`` in order."""
-        Z = np.asarray(Z, dtype=np.float64)
-        Y = np.atleast_2d(np.asarray(Y, dtype=np.float64))
-        if Y.shape[0] != Z.shape[0]:
-            Y = Y.reshape(Z.shape[0], -1)
+        Z, Y = _as_batch(Z, Y, self.readout_dim, self.n_outputs)
         for z, y in zip(Z, Y):
             self.update(z, y)
         return self

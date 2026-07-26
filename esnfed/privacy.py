@@ -35,8 +35,27 @@ def _as_rng(rng) -> np.random.Generator:
     return rng if isinstance(rng, np.random.Generator) else np.random.default_rng(rng)
 
 
+_SQRT2 = math.sqrt(2.0)
+_LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
+
+
 def _std_normal_cdf(t: float) -> float:
-    return 0.5 * (1.0 + math.erf(t / math.sqrt(2.0)))
+    return 0.5 * (1.0 + math.erf(t / _SQRT2))
+
+
+def _log_std_normal_sf(t: float) -> float:
+    """``log Phi(-t)`` for ``t >= 0``, without underflowing for large ``t``.
+
+    Needed because the analytic Gaussian mechanism evaluates
+    ``exp(epsilon) * Phi(-t)``: for a large budget the factor overflows while the
+    tail underflows, so the product must be formed in log space (the direct
+    version raised ``OverflowError: math range error``).
+    """
+    tail = 0.5 * math.erfc(t / _SQRT2)
+    if tail > 0.0:
+        return math.log(tail)
+    # Asymptotic expansion of the Gaussian tail: Phi(-t) ~ phi(t) / t.
+    return -0.5 * t * t - math.log(t) - _LOG_SQRT_2PI
 
 
 def gaussian_sigma(epsilon: float, delta: float, sensitivity: float,
@@ -76,13 +95,23 @@ def gaussian_sigma(epsilon: float, delta: float, sensitivity: float,
     # Analytic Gaussian mechanism. With the scale-free ratio s = sigma/Delta, the
     # mechanism is (epsilon, delta)-DP iff B(s) <= delta, where B is decreasing:
     #   B(s) = Phi(1/(2s) - eps*s) - e^eps * Phi(-1/(2s) - eps*s).
+    # The second term is evaluated as exp(eps + log Phi(-t)) so that a large
+    # epsilon cannot overflow before multiplying an underflowed tail.
     def B(s: float) -> float:
-        return (_std_normal_cdf(1.0 / (2.0 * s) - epsilon * s)
-                - math.exp(epsilon) * _std_normal_cdf(-1.0 / (2.0 * s) - epsilon * s))
+        t = 1.0 / (2.0 * s) + epsilon * s          # > 0 for s > 0
+        log_term = epsilon + _log_std_normal_sf(t)
+        second = math.exp(log_term) if log_term < 700.0 else math.inf
+        return _std_normal_cdf(1.0 / (2.0 * s) - epsilon * s) - second
 
     lo, hi = 1e-9, 1.0
-    while B(hi) > delta:
+    for _ in range(200):                            # bracket: B is decreasing in s
+        if B(hi) <= delta:
+            break
         hi *= 2.0
+    else:  # pragma: no cover - unreachable for finite epsilon/delta
+        raise RuntimeError(
+            f"could not bracket sigma for epsilon={epsilon}, delta={delta}"
+        )
     for _ in range(200):
         mid = 0.5 * (lo + hi)
         if B(mid) > delta:
@@ -116,6 +145,22 @@ class PrivacyConfig:
     clip_target: float = 1.0
     seed: int | None = None
 
+    def __post_init__(self) -> None:
+        # Validate here rather than deep inside gaussian_sigma, so a bad budget is
+        # reported where it was configured.
+        if not np.isfinite(self.epsilon) or self.epsilon <= 0.0:
+            raise ValueError(f"epsilon must be finite and > 0, got {self.epsilon}")
+        if not 0.0 < self.delta < 1.0:
+            raise ValueError(f"delta must be in (0, 1), got {self.delta}")
+        if not np.isfinite(self.clip_state) or self.clip_state <= 0.0:
+            raise ValueError(
+                f"clip_state must be finite and > 0, got {self.clip_state}"
+            )
+        if not np.isfinite(self.clip_target) or self.clip_target <= 0.0:
+            raise ValueError(
+                f"clip_target must be finite and > 0, got {self.clip_target}"
+            )
+
     def sensitivity(self) -> float:
         """Joint L2 (Frobenius) sensitivity of ``(A, B)`` to one record.
 
@@ -141,8 +186,23 @@ def dp_statistics(Z, Y, cfg: PrivacyConfig, rng=None):
     :func:`esnfed.federated.federated_ridge`) -- it trades accuracy for privacy.
     """
     rng = _as_rng(cfg.seed if rng is None else rng)
+    Z = np.asarray(Z, dtype=np.float64)
+    if Z.ndim != 2:
+        raise ValueError(f"Z must be a 2-D (n_samples, d) matrix, got {Z.shape}")
+    Y = np.asarray(Y, dtype=np.float64)
+    # ``np.atleast_2d`` turns a 1-D target vector into a single *row*, which then
+    # clips the whole client's targets as one record and makes Z^T Y fail; treat a
+    # flat vector as one target per sample instead.
+    if Y.ndim == 1:
+        Y = Y.reshape(-1, 1)
+    if Y.ndim != 2:
+        raise ValueError(f"Y must be 1-D or 2-D, got {Y.ndim}-D")
+    if Y.shape[0] != Z.shape[0]:
+        raise ValueError(
+            f"Z and Y disagree on sample count: {Z.shape[0]} vs {Y.shape[0]}"
+        )
     Zc = clip_rows(Z, cfg.clip_state)
-    Yc = clip_rows(np.atleast_2d(np.asarray(Y, dtype=np.float64)), cfg.clip_target)
+    Yc = clip_rows(Y, cfg.clip_target)
     A, B = ridge_statistics(Zc, Yc)
     sigma = gaussian_sigma(cfg.epsilon, cfg.delta, cfg.sensitivity())
     A = A + rng.normal(0.0, sigma, size=A.shape)
@@ -157,7 +217,22 @@ def zero_sum_masks(n: int, shape, rng=None, scale: float = 1.0) -> list[np.ndarr
     Pairwise masking (Bonawitz et al., 2017): for each pair ``(i, j)`` a shared
     random mask is added by client ``i`` and subtracted by client ``j``, so every
     client's contribution is hidden yet all masks cancel on summation.
+
+    At least two clients are required: pairwise masks are built *between* clients,
+    so a single participant necessarily gets a zero mask and its statistics reach
+    the server in the clear.
     """
+    if n < 1:
+        raise ValueError(f"n must be >= 1, got {n}")
+    if n == 1:
+        warnings.warn(
+            "secure aggregation with a single client cannot hide anything: the "
+            "pairwise mask is empty, so the server sees that client's statistics "
+            "verbatim. Aggregate over >= 2 clients.",
+            stacklevel=2,
+        )
+    if scale < 0:
+        raise ValueError(f"scale must be >= 0, got {scale}")
     rng = _as_rng(rng)
     masks = [np.zeros(shape, dtype=np.float64) for _ in range(n)]
     for i in range(n):
@@ -179,6 +254,11 @@ def secure_sum(arrays, rng=None, scale: float = 1.0) -> np.ndarray:
     arrays = [np.asarray(a, dtype=np.float64) for a in arrays]
     if not arrays:
         raise ValueError("no arrays to aggregate")
+    shapes = {a.shape for a in arrays}
+    if len(shapes) > 1:
+        raise ValueError(
+            f"all client arrays must share one shape; got {sorted(shapes)}"
+        )
     masks = zero_sum_masks(len(arrays), arrays[0].shape, rng=rng, scale=scale)
     total = np.zeros_like(arrays[0])
     for a, m in zip(arrays, masks):

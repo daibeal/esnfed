@@ -53,6 +53,27 @@ The result is **identical to pooling all the data** — exact, in a single
 communication round, with no raw data leaving any client. This is
 [`federated_ridge`](guide/federated.md).
 
+!!! note "What 'exact' means precisely"
+
+    Exactness is a statement about a **fixed partition**: given the clients'
+    states, $\sum_k \mathbf{A}_k$ equals the Gram matrix of the stacked states to
+    machine precision (verified to $10^{-16}$ in `tests/test_invariants.py`).
+
+    Two caveats worth knowing:
+
+    - **Every client harvests from a zero initial state**, so splitting one
+      series across *more* clients introduces more transients and does shift the
+      aggregate statistics — about 1.5% with no washout, 0.1% with
+      `washout=50`. Federating a series into 5 parts is therefore not bit-identical
+      to federating it into 2; each is exact with respect to its own partition.
+      This is the reason `washout` exists.
+    - **The statistics are exact, the readout is conditioning-limited.** The Gram
+      matrix of a reservoir is ill-conditioned (around $4\times10^{10}$ at
+      $\beta=10^{-6}$), so the solve amplifies floating-point differences:
+      $\mathbf{W}_\text{out}$ agrees to ~$10^{-6}$ even when
+      $\mathbf{A}$ agrees to ~$10^{-16}$. Predictions — the well-conditioned
+      quantity — agree far more closely. Raising $\beta$ tightens both.
+
 ## When reservoirs differ
 
 If clients are provisioned independently, their reservoirs differ, and the

@@ -90,8 +90,11 @@ llm = [
 # Development tooling.
 dev = [
     "pytest>=7.0",
+    "pytest-cov>=4.0",
     "build>=1.0",
     "twine>=4.0",
+    "ruff>=0.5",
+    "mypy>=1.8",
 ]
 
 [project.urls]
@@ -119,4 +122,86 @@ include = [
 # ---- pytest ------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# --strict-markers/--strict-config turn typos in markers or config into errors
+# instead of silently skipping the intent.
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "slow: takes more than a couple of seconds",
+    "network: needs internet access (skipped by default in CI)",
+]
+# Warnings raised by esnfed itself are promoted to errors, so a test that
+# triggers one has to acknowledge it with pytest.warns. Third-party deprecations
+# (matplotlib/pyparsing) are noisy and out of our control, so they stay warnings.
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::ImportWarning",
+]
+
+# ---- coverage ----------------------------------------------------------------
+[tool.coverage.run]
+source = ["esnfed"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "except ImportError",
+]
+show_missing = true
+skip_covered = true
+
+# ---- ruff --------------------------------------------------------------------
+[tool.ruff]
+line-length = 90
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # import sorting
+    "B",    # bugbear (mutable defaults, shadowed loop vars, ...)
+    "UP",   # pyupgrade
+    "C4",   # comprehensions
+    "SIM",  # simplifications
+    "NPY",  # numpy-specific rules
+    "RUF",
+]
+ignore = [
+    "E741",    # ambiguous variable names: `l` for a layer reads fine here
+    "B008",    # function call in a default arg: used for np.linspace defaults
+    "SIM108",  # ternaries are not always clearer than an if/else
+    "C408",    # dict(...) kwargs are the idiomatic Plotly/Matplotlib style
+    "RUF001",  # "ambiguous" unicode: Greek letters are deliberate in plot labels
+    "RUF022",  # __all__ is grouped by role, not alphabetised
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests unpack whole fixtures and ignore the parts a given case does not need,
+# which reads better than indexing; short lambdas are fine in assertions.
+"tests/*" = ["E501", "RUF059", "E731", "RUF012", "F841"]
+"esnfed/__init__.py" = ["F401"]   # re-exports
+
+[tool.ruff.lint.isort]
+known-first-party = ["esnfed"]
+
+# ---- mypy --------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.9"
+files = ["esnfed"]
+ignore_missing_imports = true      # numba/scipy/plotly/reservoirpy are optional
+warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# The optional backends are duck-typed against third-party objects that may not
+# be installed; type checking them adds noise without catching real bugs.
+module = ["esnfed.interop", "esnfed.viz", "esnfed.llm_orchestration"]
+check_untyped_defs = false

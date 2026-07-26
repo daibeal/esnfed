@@ -4,8 +4,14 @@ heterogeneous leaking rates, multi-type node nonlinearities, and deep ESNs.
 import numpy as np
 import pytest
 
-from esnfed import (DeepEchoStateNetwork, EchoStateNetwork, datasets, federated,
-                    metrics, topologies)
+from esnfed import (
+    DeepEchoStateNetwork,
+    EchoStateNetwork,
+    datasets,
+    federated,
+    metrics,
+    topologies,
+)
 from esnfed.esn import ACTIVATIONS
 
 

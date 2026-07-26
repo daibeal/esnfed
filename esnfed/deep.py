@@ -67,6 +67,10 @@ class DeepEchoStateNetwork:
     def __post_init__(self) -> None:
         if not self.reservoirs:
             raise ValueError("need at least one reservoir layer")
+        if self.washout < 0:
+            raise ValueError(f"washout must be >= 0, got {self.washout}")
+        if not np.isfinite(self.ridge) or self.ridge < 0:
+            raise ValueError(f"ridge must be finite and >= 0, got {self.ridge}")
         n_layers = len(self.reservoirs)
         self.layers = []
         in_dim = self.n_inputs
@@ -87,7 +91,15 @@ class DeepEchoStateNetwork:
     # ------------------------------------------------------------------ states
     def harvest(self, u: np.ndarray, x0=None) -> np.ndarray:
         """Run the stack and return ``[bias, u(t), x^(1)(t), ..., x^(L)(t)]``."""
-        u = np.atleast_2d(u).reshape(-1, self.n_inputs)
+        if x0 is not None:
+            # Silently ignoring x0 made predict(u, x0=...) identical to predict(u),
+            # so a caller expecting a warm start got a cold one with no signal.
+            raise NotImplementedError(
+                "DeepEchoStateNetwork does not support a custom initial state: "
+                "each layer would need its own x0. Harvest layer by layer via "
+                "`self.layers` if you need warm starts."
+            )
+        u = self.layers[0]._as_inputs(u)
         T = u.shape[0]
         signal = u
         states = []
@@ -106,26 +118,60 @@ class DeepEchoStateNetwork:
         return Z
 
     # ----------------------------------------------------------------- training
-    def fit(self, u: np.ndarray, y: np.ndarray) -> "DeepEchoStateNetwork":
-        y = np.atleast_2d(y).reshape(-1, self.n_outputs)
-        Z = self.harvest(u)
+    def fit(self, u: np.ndarray, y: np.ndarray) -> DeepEchoStateNetwork:
+        """Train the single readout by ridge regression over all layers' states."""
+        Z, y = self._prepare(u, y)
         A, B = ridge_statistics(Z[self.washout:], y[self.washout:])
         self.W_out = solve_readout(A, B, self.ridge)
         return self
 
     def predict(self, u: np.ndarray, x0=None) -> np.ndarray:
+        """Predict outputs for ``u`` using the trained readout."""
         if self.W_out is None:
             raise RuntimeError("readout not trained; call fit() first")
-        return self.harvest(u) @ self.W_out
+        return self.harvest(u, x0=x0) @ self.W_out
 
     # ----------------------------------------------------- federated primitives
     def local_statistics(self, u: np.ndarray, y: np.ndarray):
-        y = np.atleast_2d(y).reshape(-1, self.n_outputs)
-        Z = self.harvest(u)
+        """Return the ridge sufficient statistics ``(A, B)`` for local data.
+
+        Identical in meaning to :meth:`esnfed.esn.EchoStateNetwork.local_statistics`,
+        so a deep ESN is a drop-in for a federated
+        :class:`~esnfed.federated.Client`.
+        """
+        Z, y = self._prepare(u, y)
         return ridge_statistics(Z[self.washout:], y[self.washout:])
 
-    def set_readout(self, W_out: np.ndarray) -> "DeepEchoStateNetwork":
-        self.W_out = np.asarray(W_out, dtype=float)
+    def _prepare(self, u, y):
+        """Validate a training pair and return ``(states, targets)``."""
+        ref = self.layers[0]
+        u = ref._as_inputs(u)
+        y = np.asarray(y, dtype=np.float64)
+        if y.ndim == 1 or (y.ndim == 2 and 1 in y.shape and self.n_outputs == 1):
+            y = y.reshape(-1, self.n_outputs)
+        elif y.ndim != 2 or y.shape[1] != self.n_outputs:
+            raise ValueError(
+                f"targets must have shape (T, {self.n_outputs}), got {y.shape}"
+            )
+        if y.shape[0] != u.shape[0]:
+            raise ValueError(
+                f"inputs and targets disagree on length: {u.shape[0]} vs "
+                f"{y.shape[0]}"
+            )
+        if u.shape[0] <= self.washout:
+            raise ValueError(
+                f"sequence of {u.shape[0]} steps is too short for washout="
+                f"{self.washout}: no samples would remain to train on"
+            )
+        return self.harvest(u), y
+
+    def set_readout(self, W_out: np.ndarray) -> DeepEchoStateNetwork:
+        """Install a readout (e.g. one aggregated by the federated server)."""
+        W_out = np.asarray(W_out, dtype=float)
+        expected = (self.readout_dim, self.n_outputs)
+        if W_out.shape != expected:
+            raise ValueError(f"W_out must have shape {expected}, got {W_out.shape}")
+        self.W_out = W_out
         return self
 
     @property

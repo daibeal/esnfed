@@ -1,6 +1,5 @@
 """Tests for the experimental FedResPrompt module (esnfed.llm_orchestration)."""
 import numpy as np
-import pytest
 
 from esnfed import EchoStateNetwork, federated, topologies
 from esnfed.llm_orchestration import (

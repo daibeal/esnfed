@@ -84,7 +84,7 @@ def test_load_ted_spread_bundled_and_learnable():
     assert raw.min() >= 0  # a spread is non-negative
     u, y = datasets.load_ted_spread()
     cut = int(0.7 * len(u))
-    from esnfed import EchoStateNetwork, topologies, metrics
+    from esnfed import EchoStateNetwork, metrics, topologies
     W = topologies.random_reservoir(100, density=0.1, rng=0)
     esn = EchoStateNetwork(1, 1, W, spectral_radius=0.9, leaking_rate=0.5, washout=100)
     esn.fit(u[:cut], y[:cut])

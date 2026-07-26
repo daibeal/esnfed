@@ -19,6 +19,8 @@ experiments are fully reproducible.
 """
 from __future__ import annotations
 
+from typing import Callable
+
 import networkx as nx
 import numpy as np
 
@@ -37,8 +39,18 @@ def _weight_edges(adj: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     return W
 
 
+def _check_n(n: int) -> int:
+    n = int(n)
+    if n < 1:
+        raise ValueError(f"reservoir size n must be >= 1, got {n}")
+    return n
+
+
 def random_reservoir(n: int, density: float = 0.1, rng=None) -> np.ndarray:
     """Erdos-Renyi reservoir: each directed edge present with prob. ``density``."""
+    n = _check_n(n)
+    if not 0.0 <= density <= 1.0:
+        raise ValueError(f"density must be in [0, 1], got {density}")
     rng = _as_rng(rng)
     mask = rng.uniform(size=(n, n)) < density
     np.fill_diagonal(mask, False)
@@ -56,6 +68,13 @@ def small_world_reservoir(
     each edge rewired with probability ``p``. Small-world reservoirs combine high
     clustering with short path lengths.
     """
+    n = _check_n(n)
+    if not 0.0 <= p <= 1.0:
+        raise ValueError(f"rewiring probability p must be in [0, 1], got {p}")
+    if not 1 <= k < n:
+        raise ValueError(
+            f"the ring lattice needs 1 <= k < n neighbours, got k={k} for n={n}"
+        )
     rng = _as_rng(rng)
     seed = int(rng.integers(0, 2**31 - 1))
     g = nx.watts_strogatz_graph(n, k, p, seed=seed)
@@ -69,6 +88,11 @@ def scale_free_reservoir(n: int, m: int = 3, rng=None) -> np.ndarray:
     Growth with preferential attachment; each new node attaches to ``m`` existing
     nodes. Produces a power-law degree distribution with a few high-degree hubs.
     """
+    n = _check_n(n)
+    if not 1 <= m < n:
+        raise ValueError(
+            f"preferential attachment needs 1 <= m < n, got m={m} for n={n}"
+        )
     rng = _as_rng(rng)
     seed = int(rng.integers(0, 2**31 - 1))
     g = nx.barabasi_albert_graph(n, m, seed=seed)
@@ -83,6 +107,7 @@ def ring_reservoir(n: int, weight: float = 1.0, rng=None) -> np.ndarray:
     simplicity this minimal-complexity reservoir is competitive on many tasks
     (Rodan & Tino, 2011).
     """
+    n = _check_n(n)
     rng = _as_rng(rng)
     W = np.zeros((n, n))
     signs = rng.choice([-1.0, 1.0], size=n)
@@ -92,7 +117,7 @@ def ring_reservoir(n: int, weight: float = 1.0, rng=None) -> np.ndarray:
 
 
 # Registry used by experiment scripts and tests.
-GENERATORS = {
+GENERATORS: dict[str, Callable[..., np.ndarray]] = {
     "random": random_reservoir,
     "small_world": small_world_reservoir,
     "scale_free": scale_free_reservoir,
@@ -111,15 +136,28 @@ def graph_metrics(W: np.ndarray) -> dict:
     """Return basic graph descriptors of a reservoir weight matrix.
 
     Useful to characterise structural heterogeneity across federated nodes.
+    ``n_edges`` and ``density`` count *directed* edges; ``mean_degree`` and
+    ``clustering`` are computed on the undirected projection, so a reciprocal
+    pair contributes to the degree of both endpoints once.
+
+    An empty matrix yields all-zero / ``nan`` descriptors rather than raising.
     """
+    W = np.asarray(W)
+    if W.ndim != 2 or W.shape[0] != W.shape[1]:
+        raise ValueError(f"W must be a square 2-D matrix, got shape {W.shape}")
     adj = (W != 0).astype(int)
+    n = adj.shape[0]
+    if n == 0:
+        # nx.average_clustering divides by the node count, so guard the empty case.
+        return {"n_nodes": 0, "n_edges": 0, "density": 0.0, "mean_degree": 0.0,
+                "clustering": float("nan"), "avg_path_length": float("nan")}
     g = nx.from_numpy_array(adj, create_using=nx.DiGraph)
     ug = g.to_undirected()
-    n = adj.shape[0]
     n_edges = int(adj.sum())
     degrees = np.array([d for _, d in ug.degree()])
     try:
-        avg_path = nx.average_shortest_path_length(ug) if nx.is_connected(ug) else float("nan")
+        avg_path = (nx.average_shortest_path_length(ug)
+                    if nx.is_connected(ug) else float("nan"))
     except (nx.NetworkXError, nx.NetworkXPointlessConcept):
         avg_path = float("nan")
     return {
@@ -162,7 +200,18 @@ def leaking_rates(n, kind="uniform", low=0.1, high=1.0, n_layers=3, rng=None):
     a : ndarray of shape (n,)
         Per-node leaking rates, ready to pass as ``EchoStateNetwork(leaking_rate=a)``.
     """
-    rng = np.random.default_rng(rng) if not isinstance(rng, np.random.Generator) else rng
+    n = _check_n(n)
+    # A leaking rate of 0 freezes a neuron for ever, and low > high silently
+    # produced an empty/NaN range, so both are rejected up front.
+    if not np.isfinite(low) or low <= 0.0:
+        raise ValueError(f"low must be finite and > 0, got {low}")
+    if not np.isfinite(high) or high <= 0.0:
+        raise ValueError(f"high must be finite and > 0, got {high}")
+    if low > high:
+        raise ValueError(f"need low <= high, got low={low}, high={high}")
+    if n_layers < 1:
+        raise ValueError(f"n_layers must be >= 1, got {n_layers}")
+    rng = _as_rng(rng)
     if kind == "uniform":
         return rng.uniform(low, high, size=n)
     if kind == "log_uniform":
@@ -175,7 +224,10 @@ def leaking_rates(n, kind="uniform", low=0.1, high=1.0, n_layers=3, rng=None):
             np.full(len(idx), levels[k])
             for k, idx in enumerate(np.array_split(np.arange(n), max(1, n_layers)))
         ])
-    raise ValueError(f"unknown kind {kind!r}")
+    raise ValueError(
+        f"unknown kind {kind!r}; choices: "
+        "'uniform', 'log_uniform', 'layered', 'constant'"
+    )
 
 
 def mixed_activations(n, types=("tanh", "sigmoid", "sin"), weights=None, rng=None):
@@ -196,7 +248,29 @@ def mixed_activations(n, types=("tanh", "sigmoid", "sin"), weights=None, rng=Non
     rng
         Seed or ``numpy`` generator.
     """
-    rng = np.random.default_rng(rng) if not isinstance(rng, np.random.Generator) else rng
+    from .esn import ACTIVATIONS
+
+    n = _check_n(n)
+    rng = _as_rng(rng)
     types = list(types)
-    p = None if weights is None else np.asarray(weights, float) / np.sum(weights)
+    if not types:
+        raise ValueError("types must name at least one activation")
+    unknown = [t for t in types if t not in ACTIVATIONS]
+    if unknown:
+        raise ValueError(
+            f"unknown activation(s) {unknown}; choices: {sorted(ACTIVATIONS)}"
+        )
+    p = None
+    if weights is not None:
+        p = np.asarray(weights, dtype=float)
+        if p.shape != (len(types),):
+            raise ValueError(
+                f"weights must have one entry per type ({len(types)}), got {p.shape}"
+            )
+        if np.any(p < 0):
+            raise ValueError("weights must be non-negative")
+        total = p.sum()
+        if not total > 0:
+            raise ValueError("weights must sum to a positive value")
+        p = p / total
     return rng.choice(types, size=n, p=p)

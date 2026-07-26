@@ -31,7 +31,7 @@ import io
 import warnings
 import zipfile
 from pathlib import Path
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 import numpy as np
 
@@ -87,21 +87,54 @@ class SequenceDataset(NamedTuple):
     n_features: int
 
 
-def narma10(n: int, rng=None, warmup: int = 50) -> tuple[np.ndarray, np.ndarray]:
-    """Generate a NARMA-10 input/target sequence of length ``n``."""
+def narma10(n: int, rng=None, warmup: int = 50, *,
+            max_retries: int = 20) -> tuple[np.ndarray, np.ndarray]:
+    """Generate a NARMA-10 input/target sequence of length ``n``.
+
+    The NARMA-10 recursion is only *conditionally* stable: for an unlucky input
+    stream the cubic feedback term diverges and the target overflows to ``inf``
+    (this happens for roughly one seed in a hundred). Such a sequence is useless
+    -- it silently poisons any model trained on it, and every error metric becomes
+    ``nan`` -- so a diverging draw is rejected and re-drawn from the same
+    generator, which is the standard practice for this benchmark. A warning names
+    how many draws were discarded, and ``ValueError`` is raised if no stable
+    sequence is found within ``max_retries``.
+    """
+    if n < 1:
+        raise ValueError(f"n must be >= 1, got {n}")
+    if warmup < 0:
+        raise ValueError(f"warmup must be >= 0, got {warmup}")
     rng = np.random.default_rng(rng) if not isinstance(rng, np.random.Generator) else rng
     total = n + warmup
-    u = rng.uniform(0.0, 0.5, size=total)
-    y = np.zeros(total)
-    for t in range(10, total):
-        y[t] = (
-            0.3 * y[t - 1]
-            + 0.05 * y[t - 1] * np.sum(y[t - 10 : t])
-            + 1.5 * u[t - 10] * u[t - 1]
-            + 0.1
-        )
-    u, y = u[warmup:], y[warmup:]
-    return u.reshape(-1, 1), y.reshape(-1, 1)
+    for attempt in range(max_retries + 1):
+        u = rng.uniform(0.0, 0.5, size=total)
+        y = np.zeros(total)
+        with np.errstate(over="ignore", invalid="ignore"):
+            for t in range(10, total):
+                y[t] = (
+                    0.3 * y[t - 1]
+                    + 0.05 * y[t - 1] * np.sum(y[t - 10 : t])
+                    + 1.5 * u[t - 10] * u[t - 1]
+                    + 0.1
+                )
+        # A stable NARMA-10 orbit stays in roughly [0, 1]; anything that leaves a
+        # generous bound has entered the divergent regime.
+        if np.all(np.isfinite(y)) and np.max(np.abs(y)) < _NARMA10_STABLE_BOUND:
+            if attempt:
+                warnings.warn(
+                    f"discarded {attempt} diverging NARMA-10 draw(s) before "
+                    "obtaining a stable sequence",
+                    stacklevel=2,
+                )
+            return u[warmup:].reshape(-1, 1), y[warmup:].reshape(-1, 1)
+    raise ValueError(
+        f"could not generate a stable NARMA-10 sequence of length {n} in "
+        f"{max_retries + 1} attempts; the recursion kept diverging"
+    )
+
+
+# Stable NARMA-10 orbits live in ~[0, 1]; this is a generous divergence trigger.
+_NARMA10_STABLE_BOUND = 50.0
 
 
 def mackey_glass(
@@ -162,7 +195,16 @@ def split(
     u: np.ndarray, y: np.ndarray, train_frac: float = 0.7
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Chronological train/test split (no shuffling, to preserve dynamics)."""
+    if len(u) != len(y):
+        raise ValueError(f"u and y disagree on length: {len(u)} vs {len(y)}")
+    if not 0.0 < train_frac < 1.0:
+        raise ValueError(f"train_frac must be in (0, 1), got {train_frac}")
     cut = int(len(u) * train_frac)
+    if cut == 0 or cut == len(u):
+        raise ValueError(
+            f"train_frac={train_frac} leaves one side of the split empty for a "
+            f"series of {len(u)} steps"
+        )
     return u[:cut], y[:cut], u[cut:], y[cut:]
 
 
@@ -172,8 +214,19 @@ def partition_iid(
     """Split a sequence into ``n_clients`` contiguous blocks (federated clients).
 
     Contiguous blocks (rather than shuffled samples) keep each client's slice a
-    valid time series, which is required for reservoir state harvesting.
+    valid time series, which is required for reservoir state harvesting. The split
+    is therefore *deterministic*: ``rng`` is accepted only for signature
+    compatibility with shuffling partitioners and is ignored.
     """
+    if len(u) != len(y):
+        raise ValueError(f"u and y disagree on length: {len(u)} vs {len(y)}")
+    if n_clients < 1:
+        raise ValueError(f"n_clients must be >= 1, got {n_clients}")
+    if n_clients > len(u):
+        raise ValueError(
+            f"cannot split {len(u)} steps across {n_clients} clients without "
+            "producing empty partitions"
+        )
     bounds = np.linspace(0, len(u), n_clients + 1, dtype=int)
     return [(u[a:b], y[a:b]) for a, b in zip(bounds[:-1], bounds[1:])]
 
@@ -200,17 +253,42 @@ def from_array(
     -------
     (u, y)
         Input/target arrays of shape (T-1, 1).
+
+    Notes
+    -----
+    Non-finite observations are dropped, which *closes the gap* rather than
+    interpolating it: the remaining samples become adjacent in the returned task,
+    so the series is treated as evenly spaced. A warning reports how many were
+    removed.
     """
     s = np.asarray(series, dtype=float).ravel()
-    s = s[np.isfinite(s)]
+    finite = np.isfinite(s)
+    n_dropped = int(s.size - finite.sum())
+    if n_dropped:
+        warnings.warn(
+            f"dropped {n_dropped} non-finite observation(s); the surrounding "
+            "samples are now treated as consecutive in time",
+            stacklevel=2,
+        )
+    s = s[finite]
+    # "next" pairs consecutive levels (needs 2 points); "change" first differences
+    # the series and then pairs those (needs 3).
+    needed = {"next": 2, "change": 3}
+    if predict not in needed:
+        raise ValueError(
+            f"predict must be 'next' or 'change', got {predict!r}"
+        )
+    if s.size < needed[predict]:
+        raise ValueError(
+            f"predict={predict!r} needs at least {needed[predict]} finite "
+            f"observations, got {s.size}"
+        )
     if normalize and s.std() > 0:
         s = (s - s.mean()) / s.std()
     if predict == "next":
         return s[:-1].reshape(-1, 1), s[1:].reshape(-1, 1)
-    if predict == "change":
-        d = np.diff(s)
-        return d[:-1].reshape(-1, 1), d[1:].reshape(-1, 1)
-    raise ValueError("predict must be 'next' or 'change'")
+    d = np.diff(s)
+    return d[:-1].reshape(-1, 1), d[1:].reshape(-1, 1)
 
 
 def _column_from_csv(text: str, column) -> np.ndarray:
@@ -221,9 +299,18 @@ def _column_from_csv(text: str, column) -> np.ndarray:
     if column is None:
         idx = len(header) - 1  # last column by default
     elif isinstance(column, int):
+        if not -len(header) <= column < len(header):
+            raise IndexError(
+                f"column index {column} is out of range for {len(header)} columns"
+            )
         idx = column
     else:
-        idx = header.index(column)
+        try:
+            idx = header.index(column)
+        except ValueError as e:
+            raise KeyError(
+                f"column {column!r} not found; available columns: {header}"
+            ) from e
     vals = []
     for r in data:
         if idx >= len(r):
@@ -384,17 +471,18 @@ def load_fred_matrix(
 #  Sequence-classification benchmarks (download on demand, cached)
 # ─────────────────────────────────────────────────────────────────────────────
 def _parse_jv_blocks(text: str) -> list:
-    blocks, cur = [], []
+    blocks: list = []
+    cur: list = []
     for line in text.splitlines():
         line = line.strip()
         if not line:
             if cur:
-                blocks.append(np.asarray(cur, dtype=float))
+                blocks.append(np.asarray(cur, dtype=np.float64))
                 cur = []
         else:
             cur.append([float(x) for x in line.split()])
     if cur:
-        blocks.append(np.asarray(cur, dtype=float))
+        blocks.append(np.asarray(cur, dtype=np.float64))
     return blocks
 
 
@@ -486,7 +574,8 @@ def group_clients(X, y, groups):
     return clients
 
 
-REGISTRY = {
+#: Synthetic benchmark generators, keyed by name (see :func:`make_dataset`).
+REGISTRY: dict[str, Callable[..., tuple[np.ndarray, np.ndarray]]] = {
     "narma10": narma10,
     "mackey_glass": mackey_glass,
     "lorenz": lorenz,
@@ -494,6 +583,11 @@ REGISTRY = {
 
 
 def make_dataset(name: str, n: int, **kwargs) -> tuple[np.ndarray, np.ndarray]:
+    """Generate ``n`` steps of a named synthetic benchmark from :data:`REGISTRY`.
+
+    ``name`` is one of ``"narma10"``, ``"mackey_glass"`` or ``"lorenz"``; extra
+    keyword arguments are forwarded to the generator.
+    """
     if name not in REGISTRY:
         raise KeyError(f"unknown dataset {name!r}; choices: {list(REGISTRY)}")
     return REGISTRY[name](n, **kwargs)

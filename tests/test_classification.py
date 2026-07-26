@@ -7,7 +7,8 @@ centralised one exactly, mirroring the regression case.
 import numpy as np
 import pytest
 
-from esnfed import EchoStateNetwork, classification as clf, topologies
+from esnfed import EchoStateNetwork, topologies
+from esnfed import classification as clf
 
 
 def make_data(n_per=20, n_classes=3, seed=0):
