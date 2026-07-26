@@ -279,7 +279,8 @@ class TestSequenceLoaders:
 
     def test_a_loaded_dataset_can_be_classified(self, tmp_path, fake_network):
         """End-to-end: loader -> reservoir features -> federated classifier."""
-        from esnfed import EchoStateNetwork, classification as clf
+        from esnfed import EchoStateNetwork
+        from esnfed import classification as clf
         ds = datasets.load_japanese_vowels(cache_dir=tmp_path)
         W = topologies.random_reservoir(40, density=0.15, rng=0)
         esn = EchoStateNetwork(ds.n_features, ds.n_classes, W, washout=0,
